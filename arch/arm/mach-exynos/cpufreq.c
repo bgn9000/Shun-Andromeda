@@ -89,7 +89,7 @@ static int exynos_target(struct cpufreq_policy *policy,
 			  unsigned int target_freq,
 			  unsigned int relation)
 {
-	unsigned int index, old_index;
+	unsigned int index, old_index, max_index = 0;
 	unsigned int arm_volt, safe_arm_volt = 0;
 	int ret = 0;
 	struct cpufreq_frequency_table *freq_table = exynos_info->freq_table;
@@ -100,18 +100,39 @@ static int exynos_target(struct cpufreq_policy *policy,
 	if (exynos_cpufreq_disable)
 		goto out;
 
-	freqs.old = policy->cur;
+	freqs.old = exynos_getspeed(policy->cpu);
 
-	if (cpufreq_frequency_table_target(policy, freq_table,
-					   freqs.old, relation, &old_index)) {
-		ret = -EINVAL;
-		goto out;
+	if(policy->max < freqs.old || policy->min > freqs.old)
+	{
+		struct cpufreq_policy policytemp;
+		memcpy(&policytemp, policy, sizeof(struct cpufreq_policy));
+		if(policytemp.max < freqs.old)
+			policytemp.max = freqs.old;
+		if(policytemp.min > freqs.old)
+			policytemp.min = freqs.old;
+		if (cpufreq_frequency_table_target(&policytemp, freq_table,
+						   freqs.old, relation, &old_index)) {
+			ret = -EINVAL;
+			goto out;
+		}
+	} else
+	{
+		if (cpufreq_frequency_table_target(policy, freq_table,
+						   freqs.old, relation, &old_index)) {
+			ret = -EINVAL;
+			goto out;
+		}
 	}
 
 	if (cpufreq_frequency_table_target(policy, freq_table,
 					   target_freq, relation, &index)) {
 		ret = -EINVAL;
 		goto out;
+	}
+
+	/* Prevent freqs going above max policy - originally by netarchy */
+	while (freq_table[index].frequency > policy->max) {
+		index += 1;
 	}
 
 	/* Need to set performance limitation */
@@ -123,8 +144,9 @@ static int exynos_target(struct cpufreq_policy *policy,
 
 #if defined(CONFIG_CPU_EXYNOS4210)
 	/* Do NOT step up max arm clock directly to reduce power consumption */
-	if (index == exynos_info->max_support_idx && old_index > 3)
-		index = 3;
+	exynos_cpufreq_get_level(policy->max, &max_index);
+	if (index == max_index && old_index > max_index + 5)
+		index = max_index + 5;
 #endif
 
 	freqs.new = freq_table[index].frequency;
@@ -490,6 +512,7 @@ static int exynos_cpufreq_notifier_event(struct notifier_block *this,
 
 static struct notifier_block exynos_cpufreq_notifier = {
 	.notifier_call = exynos_cpufreq_notifier_event,
+	.priority = INT_MIN, /* done last - originally by arighi */
 };
 
 static int exynos_cpufreq_policy_notifier_call(struct notifier_block *this,
@@ -524,7 +547,11 @@ static struct notifier_block exynos_cpufreq_policy_notifier = {
 
 static int exynos_cpufreq_cpu_init(struct cpufreq_policy *policy)
 {
-	policy->cur = policy->min = policy->max = exynos_getspeed(policy->cpu);
+	int ret;
+
+	policy->cur = policy->min = policy->max =
+		policy->max_suspend = policy->min_suspend =
+			exynos_getspeed(policy->cpu);
 
 	cpufreq_frequency_table_get_attr(exynos_info->freq_table, policy->cpu);
 
@@ -544,7 +571,15 @@ static int exynos_cpufreq_cpu_init(struct cpufreq_policy *policy)
 		cpumask_setall(policy->cpus);
 	}
 
-	return cpufreq_frequency_table_cpuinfo(policy, exynos_info->freq_table);
+	ret = cpufreq_frequency_table_cpuinfo(policy, exynos_info->freq_table);
+
+	/* Safe default startup limits */
+	policy->max = 1200000;
+	policy->max_suspend = 500000;
+	policy->min = 200000;
+	policy->min_suspend = 200000;
+
+	return ret;
 }
 
 static int exynos_cpufreq_reboot_notifier_call(struct notifier_block *this,
@@ -564,6 +599,12 @@ static struct notifier_block exynos_cpufreq_reboot_notifier = {
 	.notifier_call = exynos_cpufreq_reboot_notifier_call,
 };
 
+/* Make sure we populate scaling_available_freqs in sysfs - netarchy */
+static struct freq_attr *exynos_cpufreq_attr[] = {
+  &cpufreq_freq_attr_scaling_available_freqs,
+  NULL,
+};
+
 static struct cpufreq_driver exynos_driver = {
 	.flags		= CPUFREQ_STICKY,
 	.verify		= exynos_verify_speed,
@@ -571,6 +612,7 @@ static struct cpufreq_driver exynos_driver = {
 	.get		= exynos_getspeed,
 	.init		= exynos_cpufreq_cpu_init,
 	.name		= "exynos_cpufreq",
+	.attr           = exynos_cpufreq_attr,
 #ifdef CONFIG_PM
 	.suspend	= exynos_cpufreq_suspend,
 	.resume		= exynos_cpufreq_resume,
