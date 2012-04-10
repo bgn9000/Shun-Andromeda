@@ -239,7 +239,11 @@ struct s3cfb_user_chroma {
 #endif
 
 extern struct fb_ops			s3cfb_ops;
-extern inline struct s3cfb_global	*get_fimd_global(int id);
+#ifndef CONFIG_CC_OPTIMIZE_FOR_SPEED
+extern inline struct s3cfb_global       *get_fimd_global(int id);
+#else
+extern struct s3cfb_global      *get_fimd_global(int id);
+#endif
 
 /* S3CFB */
 extern struct s3c_platform_fb *to_fb_plat(struct device *dev);
