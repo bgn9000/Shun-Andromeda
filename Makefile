@@ -193,7 +193,7 @@ SUBARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ \
 # Note: Some architectures assign CROSS_COMPILE in their arch/*/Makefile
 export KBUILD_BUILDHOST := $(SUBARCH)
 ARCH		?= arm
-CROSS_COMPILE	?= ../arm-2012/bin_463/arm-linux-gnueabi-
+CROSS_COMPILE	?= $(shell cd ..;pwd)/toolchain/bin/arm-eabi-
 CROSS_COMPILE	?= $(CONFIG_CROSS_COMPILE:"%"=%)
 
 # Architecture as present in compile.h
@@ -246,13 +246,8 @@ CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 
 HOSTCC       = gcc
 HOSTCXX      = g++
-ifdef CONFIG_CC_OPTIMIZE_FOR_SPEED
-HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O3 -fomit-frame-pointer
-HOSTCXXFLAGS = -O3
-else
 HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 -fomit-frame-pointer
 HOSTCXXFLAGS = -O2
-endif
 
 # Decide whether to build built-in, modular, or both.
 # Normally, just do built-in.
@@ -353,6 +348,12 @@ CHECK		= sparse
 
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
+SIYAH_FLAGS   = -marm -march=armv7-a -mfloat-abi=hard \
+			   -mcpu=cortex-a9 -mfpu=vfp3 \
+			   -ffast-math -ftree-vectorize \
+			   -floop-interchange -floop-strip-mine -floop-block \
+			   -pipe
+			
 CFLAGS_MODULE   =
 AFLAGS_MODULE   =
 LDFLAGS_MODULE  =
@@ -370,13 +371,11 @@ LINUXINCLUDE    := -I$(srctree)/arch/$(hdr-arch)/include \
 
 KBUILD_CPPFLAGS := -D__KERNEL__
 
-IKKI_FLAGS	= -marm -mtune=cortex-a9 -march=armv7-a -Wno-unused-but-set-variable -Wunused-variable
 KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
-		   -fno-delete-null-pointer-checks $(IKKI_FLAGS) -mno-unaligned-access
-
+		   -fno-delete-null-pointer-checks $(SIYAH_FLAGS)
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
 KBUILD_AFLAGS   := -D__ASSEMBLY__
@@ -417,7 +416,7 @@ export RCS_TAR_IGNORE := --exclude SCCS --exclude BitKeeper --exclude .svn --exc
 # Basic helpers built in scripts/
 PHONY += scripts_basic
 scripts_basic:
-	$(Q)$(MAKE) V=1 $(build)=scripts/basic
+	$(Q)$(MAKE) $(build)=scripts/basic
 	$(Q)rm -f .tmp_quiet_recordmcount
 
 # To avoid any implicit rule to kick in, define an empty command.
@@ -494,11 +493,11 @@ export KBUILD_DEFCONFIG KBUILD_KCONFIG
 
 config: scripts_basic outputmakefile FORCE
 	$(Q)mkdir -p include/linux include/config
-	$(Q)$(MAKE) V=1 $(build)=scripts/kconfig $@
+	$(Q)$(MAKE) $(build)=scripts/kconfig $@
 
 %config: scripts_basic outputmakefile FORCE
 	$(Q)mkdir -p include/linux include/config
-	$(Q)$(MAKE) V=1 $(build)=scripts/kconfig $@
+	$(Q)$(MAKE) $(build)=scripts/kconfig $@
 
 else
 # ===========================================================================
@@ -538,7 +537,7 @@ $(KCONFIG_CONFIG) include/config/auto.conf.cmd: ;
 # if auto.conf.cmd is missing then we are probably in a cleaned tree so
 # we execute the config step to be sure to catch updated Kconfig files
 include/config/%.conf: $(KCONFIG_CONFIG) include/config/auto.conf.cmd
-	$(Q)$(MAKE) V=1 -f $(srctree)/Makefile silentoldconfig
+	$(Q)$(MAKE) -f $(srctree)/Makefile silentoldconfig
 else
 # external modules needs include/generated/autoconf.h and include/config/auto.conf
 # but do not care if they are up-to-date. Use auto.conf to trigger the test
@@ -566,18 +565,10 @@ endif # $(dot-config)
 # Defaults to vmlinux, but the arch makefile usually adds further targets
 all: vmlinux
 
-ifdef CONFIG_CC_OPTIMIZE_FOR_FAST
-KBUILD_CFLAGS	+= -Ofast -DCONFIG_CC_OPTIMIZE_FOR_SPEED
-else
-ifdef CONFIG_CC_OPTIMIZE_FOR_SPEED
-KBUILD_CFLAGS	+= -O3 -DCONFIG_CC_OPTIMIZE_FOR_SPEED
-else
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS	+= -Os
 else
 KBUILD_CFLAGS	+= -O2
-endif
-endif
 endif
 
 ifdef CONFIG_CC_CHECK_WARNING_STRICTLY

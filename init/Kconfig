@@ -968,7 +968,7 @@ config KALLSYMS
 
 config KALLSYMS_ALL
 	bool "Include all symbols in kallsyms"
-	depends on KALLSYMS
+	depends on DEBUG_KERNEL && KALLSYMS
 	help
 	   Normally kallsyms only contains the symbols of functions for nicer
 	   OOPS messages and backtraces (i.e., symbols from the text and inittext
@@ -1268,6 +1268,11 @@ config SLUB
 	   and has enhanced diagnostics. SLUB is the default choice for
 	   a slab allocator.
 
+config SLQB
+	bool "SLQB (Queued allocator)"
+	help
+	  SLQB is a proposed new slab allocator.
+
 config SLOB
 	depends on EXPERT
 	bool "SLOB (Simple Allocator)"
@@ -1324,7 +1329,7 @@ config HAVE_GENERIC_DMA_COHERENT
 config SLABINFO
 	bool
 	depends on PROC_FS
-	depends on SLAB || SLUB_DEBUG
+	depends on SLAB || SLUB_DEBUG || SLQB
 	default y
 
 config RT_MUTEXES
