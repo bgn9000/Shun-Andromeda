@@ -1,4 +1,5 @@
 #!/bin/sh
+export USE_SEC_FIPS_MODE=true
 export KERNELDIR=`readlink -f .`
 export PARENT_DIR=`readlink -f ..`
 INITRAMFS_TMP="/tmp/initramfs-source"
