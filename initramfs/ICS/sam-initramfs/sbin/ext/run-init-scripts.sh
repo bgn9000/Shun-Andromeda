@@ -11,8 +11,8 @@ if [ -f /system/xbin/customboot.sh ]; then
   /sbin/busybox sh /system/xbin/customboot.sh
 fi;
 
-if [ -f /data/local/customboot.sh ]; then
-  /sbin/busybox sh /data/local/customboot.sh
+if [ -f /data/.shun/customboot.sh ]; then
+  /sbin/busybox sh /data/.shun/customboot.sh
 fi;
 
 # fix for samsung roms - setting scaling_max_freq - gm
