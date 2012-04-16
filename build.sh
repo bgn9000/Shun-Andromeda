@@ -16,7 +16,7 @@ export CROSS_COMPILE=$PARENT_DIR/arm-2012/bin_463/arm-linux-gnueabi-
 echo config...
 if [ ! -f $KERNELDIR/.config ];
 then
-  ./config.sh $2
+  ./config.sh $3
 fi
 
 . $KERNELDIR/.config
@@ -34,8 +34,14 @@ mkdir $INITRAMFS_TMP/lib
 mkdir $INITRAMFS_TMP/lib/modules/
 if [ "${1}" == "SAM" ]; 
 then
-	export CIBLE="sam"
-	cd initramfs/GB/sam-initramfs
+	if [ "${2}" == "GB" ];
+	then
+		export CIBLE="sam"
+		cd initramfs/GB/sam-initramfs
+	else
+		export CIBLE="samics"
+		cd initramfs/ICS/sam-initramfs
+	fi
 elif [ "${1}" == "AOSP" ];
 then
 	export CIBLE="aosp"
@@ -58,7 +64,7 @@ echo compiling kernel...
 nice -n 10 make -j3 zImage CONFIG_INITRAMFS_SOURCE="$INITRAMFS_TMP.cpio" || exit 1
 $PARENT_DIR/mkshbootimg.py $KERNELDIR/zImage $KERNELDIR/arch/arm/boot/zImage $PARENT_DIR/payload.tar
 
-if [ "${2}" == "ATT" ];then
+if [ "${3}" == "ATT" ];then
 	mv $KERNELDIR/zImage $KERNELDIR/zImage-att-$CIBLE
 elif [ "${1}" == "NTT" ];then
 	mv $KERNELDIR/zImage $KERNELDIR/zImage-ntt-$CIBLE
