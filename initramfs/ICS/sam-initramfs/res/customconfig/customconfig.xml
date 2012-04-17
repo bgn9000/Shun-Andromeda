@@ -147,23 +147,20 @@
       </spinner>
       <spinner description="This will set the default CPU governor. Default CPU governor will only be set during early stages of booting (before init.d execution) and can be overriden by later scripts or apps." name="Default CPU Governor" action="generic /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor">
              <spinnerItem name="ondemand" value="ondemand"/> 
-             <spinnerItem name="pegasusq" value="pegasusq"/> 
              <spinnerItem name="conservative" value="conservative"/> 
              <spinnerItem name="lulzactive" value="lulzactive"/> 
-             <spinnerItem name="smartassV2" value="smartassV2"/> 
-             <spinnerItem name="interactive" value="interactive"/> 
       </spinner>
       <spinner description="This will set the default I/O scheduler. Default I/O scheduler will only be set during early stages of booting (before init.d execution) and can be overriden by later scripts or apps." name="Default I/O Scheduler" action="generic /sys/block/mmcblk0/queue/scheduler">
-             <spinnerItem name="sio" value="sio"/> 
+             <spinnerItem name="bfq" value="bfq"/>
+	     <spinnerItem name="sio" value="sio"/> 
              <spinnerItem name="noop" value="noop"/> 
              <spinnerItem name="deadline" value="deadline"/> 
-             <spinnerItem name="vr" value="vr"/> 
              <spinnerItem name="cfq" value="cfq"/> 
       </spinner>
       <spinner description="Charge current setting" name="Charge Current" action="chargecurrent">
              <spinnerItem name="AC:650mA, Misc,USB:450mA (Stock)" value="1"/> 
-             <spinnerItem name="AC,Misc:650mA, USB:450mA" value="2"/> 
-             <spinnerItem name="All:650mA (risky for USB ports)" value="3"/> 
+             <spinnerItem name="AC:800mA, Misc:650mA, USB:450mA" value="2"/> 
+             <spinnerItem name="AC:950mA, Misc:650mA, USB:450mA" value="3"/> 
       </spinner>
       <button description="If you think that the fuel gauge chip is behaving weird use this button to reset it. Give it a few hours after you reset the gauge. It may still show you funny values for those period, then the battery percentage should be fine." name="Reset Fuel-Gauge Chip" action="reset-fuelgauge" label="Reset Fuel-Gauge Chip"/>
     </settingsPane>
