@@ -21,7 +21,7 @@ tar xvf /res/misc/dev.tar
 
 
 SECONDROM=1
-NOBOOTLOGO=1
+NOBOOTLOGO=0
 mount -t ext4 -o ro /dev/block/mmcblk0p12 /preload
 mount -t vfat /dev/block/mmcblk0p11 /mnt/sdcard
 [ -f /preload/build.prop ] || SECONDROM=0
