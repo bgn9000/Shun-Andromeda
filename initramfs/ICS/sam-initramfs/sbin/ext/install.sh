@@ -34,14 +34,14 @@ then
     rm -f /system/xbin/su
     mkdir /system/xbin
     chmod 755 /system/xbin
-    xzcat /res/misc/payload/su.xz > /system/xbin/su
+    xzcat /tmp/misc/su.xz > /system/xbin/su
     chown 0.0 /system/xbin/su
     chmod 6755 /system/xbin/su
 
     rm -f /system/app/*uper?ser.apk
     rm -f /data/app/*uper?ser.apk
     rm -rf /data/dalvik-cache/*uper?ser.apk*
-    xzcat /res/misc/payload/Superuser.apk.xz > /system/app/Superuser.apk
+    xzcat /tmp/misc/Superuser.apk.xz > /system/app/Superuser.apk
     chown 0.0 /system/app/Superuser.apk
     chmod 644 /system/app/Superuser.apk
   fi
@@ -57,7 +57,7 @@ then
   rm /data/dalvik-cache/*CWMManager.apk*
   rm /data/app/eu.chainfire.cfroot.cwmmanager*.apk
 
-  xzcat /res/misc/payload/CWMManager.apk.xz > /system/app/CWMManager.apk
+  xzcat /tmp/misc/CWMManager.apk.xz > /system/app/CWMManager.apk
   chown 0.0 /system/app/CWMManager.apk
   chmod 644 /system/app/CWMManager.apk
   mkdir /system/.shun
@@ -93,12 +93,10 @@ then
   if [ "$payload_extracted" == "0" ];then
     extract_payload
   fi
-  xzcat /res/misc/payload/ntfs-3g.xz > /system/xbin/ntfs-3g
+  xzcat /tmp/misc/ntfs-3g.xz > /system/xbin/ntfs-3g
   chown 0.0 /system/xbin/ntfs-3g
   chmod 755 /system/xbin/ntfs-3g
 fi
-
-#rm -rf /res/misc/payload
-
+rm -rf /tmp/misc/
 /sbin/busybox mount -t rootfs -o remount,ro rootfs
 mount -o remount,ro /system
