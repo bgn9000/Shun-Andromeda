@@ -3785,7 +3785,6 @@ struct gpio_keys_button u1_buttons[] = {
 		.wakeup = 1,
 		.isr_hook = sec_debug_check_crash_key,
 	},			/* power key */
-#if !defined(CONFIG_TARGET_LOCALE_NAATT_TEMP)
 	{
 		.code = KEY_HOME,
 		.gpio = GPIO_OK_KEY,
@@ -3793,7 +3792,6 @@ struct gpio_keys_button u1_buttons[] = {
 		.type = EV_KEY,
 		.wakeup = 1,
 	},			/* ok key */
-#endif
 };
 
 struct gpio_keys_platform_data u1_keypad_platform_data = {
@@ -3941,9 +3939,9 @@ static void mxt224_power_off(void)
 #define MXT224_THRESHOLD_BATT		40
 #define MXT224_THRESHOLD_BATT_INIT		50
 #define MXT224_THRESHOLD_CHRG		55
-#define MXT224_NOISE_THRESHOLD_BATT		30
+#define MXT224_NOISE_THRESHOLD_BATT		15
 #define MXT224_NOISE_THRESHOLD_CHRG		40
-#define MXT224_MOVFILTER_BATT		30
+#define MXT224_MOVFILTER_BATT		11
 #define MXT224_MOVFILTER_CHRG		47
 #define MXT224_ATCHCALST		4
 #define MXT224_ATCHCALTHR		35
@@ -3976,7 +3974,7 @@ static u8 t20_config[] = { PROCI_GRIPFACESUPPRESSION_T20,
 
 static u8 t22_config[] = { PROCG_NOISESUPPRESSION_T22,
 	143, 0, 0, 0, 0, 0, 0, 3, MXT224_NOISE_THRESHOLD_BATT, 0,
-	0, 29, 34, 39, 49, 58, 3
+	0, 10, 12, 18, 20, 29, 3
 };
 
 static u8 t28_config[] = { SPT_CTECONFIG_T28,
@@ -5769,9 +5767,9 @@ static struct platform_device *smdkc210_devices[] __initdata = {
 #ifdef CONFIG_EXYNOS4_SETUP_THERMAL
 /* below temperature base on the celcius degree */
 struct s5p_platform_tmu u1_tmu_data __initdata = {
-	.ts = { //use 4x12 values -gm
-		.stop_1st_throttle  = 78,
-		.start_1st_throttle = 80,
+	.ts = {
+		.stop_1st_throttle  = 61,
+		.start_1st_throttle = 64,
 		.stop_2nd_throttle  = 87,
 		.start_2nd_throttle = 103,
 		.start_tripping     = 110,

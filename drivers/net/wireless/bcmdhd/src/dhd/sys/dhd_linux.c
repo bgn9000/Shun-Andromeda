@@ -399,6 +399,19 @@ char iface_name[IFNAMSIZ] = {'\0'};
 module_param_string(iface_name, iface_name, IFNAMSIZ, 0);
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 0))
+#define DAEMONIZE(a) daemonize(a); \
+	allow_signal(SIGKILL); \
+	allow_signal(SIGTERM);
+#else /* Linux 2.4 (w/o preemption patch) */
+#define RAISE_RX_SOFTIRQ() \
+	cpu_raise_softirq(smp_processor_id(), NET_RX_SOFTIRQ)
+#define DAEMONIZE(a) daemonize(); \
+	do { if (a) \
+		strncpy(current->comm, a, MIN(sizeof(current->comm), (strlen(a) + 1))); \
+	} while (0);
+#endif /* LINUX_VERSION_CODE  */
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 0))
 #define BLOCKABLE()	(!in_atomic())
 #else
 #define BLOCKABLE()	(!in_interrupt())
@@ -2770,9 +2783,9 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 
 #ifdef WL_CFG80211
 	/* Attach and link in the cfg80211 */
-	while (unlikely(wl_cfg80211_attach(net, &dhd->pub))) {
+	if (unlikely(wl_cfg80211_attach(net, &dhd->pub))) {
 		DHD_ERROR(("wl_cfg80211_attach failed\n"));
-		//goto fail;
+		goto fail;
 	}
 
 	dhd_monitor_init(&dhd->pub);

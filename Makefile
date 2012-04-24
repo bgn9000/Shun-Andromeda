@@ -347,8 +347,6 @@ CHECK		= sparse
 
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
-SIYAH_FLAGS   = -marm -march=armv7-a -mfloat-abi=hard \
-			   -mcpu=cortex-a9 -mfpu=vfp3			
 CFLAGS_MODULE   =
 AFLAGS_MODULE   =
 LDFLAGS_MODULE  =
@@ -370,7 +368,7 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
-		   -fno-delete-null-pointer-checks $(SIYAH_FLAGS)
+		   -fno-delete-null-pointer-checks
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
 KBUILD_AFLAGS   := -D__ASSEMBLY__
@@ -560,18 +558,10 @@ endif # $(dot-config)
 # Defaults to vmlinux, but the arch makefile usually adds further targets
 all: vmlinux
 
-ifdef CONFIG_CC_OPTIMIZE_FOR_FAST
-KBUILD_CFLAGS	+= -Ofast -DCONFIG_CC_OPTIMIZE_FOR_SPEED
-else
-ifdef CONFIG_CC_OPTIMIZE_FOR_SPEED
-KBUILD_CFLAGS	+= -O3 -DCONFIG_CC_OPTIMIZE_FOR_SPEED
-else
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS	+= -Os
 else
 KBUILD_CFLAGS	+= -O2
-endif
-endif
 endif
 
 ifdef CONFIG_CC_CHECK_WARNING_STRICTLY
