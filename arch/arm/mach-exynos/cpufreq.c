@@ -581,7 +581,7 @@ static int exynos_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	ret = cpufreq_frequency_table_cpuinfo(policy, exynos_info->freq_table);
 	/* set safe default min and max speeds - netarchy */
 	policy->max = exynos_info->freq_table[exynos_info->max_current_idx].frequency;
-	policy->min = exynos_info->freq_table[exynos_info->min_current_idx].frequency;
+	policy->min = 200 * 1000;
 	return ret;
 }
 
