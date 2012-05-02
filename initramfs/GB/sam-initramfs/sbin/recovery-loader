@@ -1,6 +1,7 @@
 #!/sbin/ext/busybox sh
 
 /sbin/ext/busybox mount -t rootfs -o remount,rw rootfs
+/sbin/ext/busybox insmod /lib/modules/logger.ko
 /sbin/ext/busybox ln -s /sbin/recovery /sbin/busybox
 
 /sbin/ext/busybox ln -s /sbin/busybox /sbin/sh
@@ -17,13 +18,17 @@
 /sbin/ext/busybox mkdir /etc
 /sbin/ext/busybox cat /res/etc/recovery.fstab > /etc/recovery.fstab
 
-start adbd
+#start adbd
 stop tvout
 
 /sbin/ext/busybox rm /cache
 /sbin/ext/busybox mkdir /cache
 /sbin/ext/busybox chmod 777 /cache
 /sbin/ext/busybox mount -t ext4 /dev/block/mmcblk0p7 /cache
+
+#cd /
+#eval $(/sbin/read_boot_headers /dev/block/mmcblk0p5)
+#dd bs=512 if=/dev/block/mmcblk0p5 skip=$recovery_offset count=$recovery_len | busybox xzcat | busybox cpio -i
 
 if /sbin/ext/busybox [ -f /cache/recovery/command ];
 then
