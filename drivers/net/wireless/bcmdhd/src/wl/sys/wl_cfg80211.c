@@ -1374,6 +1374,7 @@ wl_cfg80211_notify_ifchange(void)
 	return 0;
 }
 
+
 /* Find my listen channel value in my GON Req frame,
  * Save my listen channel for channel sync
  */
@@ -1461,12 +1462,6 @@ static void wl_scan_prep(struct wl_scan_params *params, struct cfg80211_scan_req
 	params->passive_time = htod32(params->passive_time);
 	params->home_time = htod32(params->home_time);
 	/* if request is null just exit so it will be all channel broadcast scan */
-	if (!request)
-		return;
-
-	n_ssids = request->n_ssids;
-	n_channels = request->n_channels;
-
 	if (!request)
 		return;
 
@@ -1562,7 +1557,9 @@ wl_run_iscan(struct wl_iscan_ctrl *iscan, struct cfg80211_scan_request *request,
 		goto done;
 	}
 
-	wl_scan_prep(&params->params, request);
+	if (request != NULL)
+		wl_scan_prep(&params->params, request);
+
 	params->version = htod32(ISCAN_REQ_VERSION);
 	params->action = htod16(action);
 	params->scan_duration = htod16(0);
@@ -1702,7 +1699,8 @@ wl_run_escan(struct wl_priv *wl, struct net_device *ndev,
 			goto exit;
 		}
 
-		wl_scan_prep(&params->params, request);
+		if (request != NULL)
+			wl_scan_prep(&params->params, request);
 		params->version = htod32(ESCAN_REQ_VERSION);
 		params->action =  htod16(action);
 		params->sync_id = wl->escan_info.cur_sync_id;
@@ -3368,10 +3366,9 @@ wl_cfg80211_get_station(struct wiphy *wiphy, struct net_device *dev,
 #endif
 	} else if (wl_get_mode_by_netdev(wl, dev) == WL_MODE_BSS) {
 		u8 *curmacp = wl_read_prof(wl, dev, WL_PROF_BSSID);
-		err = -ENODEV;
 		if (!wl_get_drv_status(wl, CONNECTED, dev) ||
-		    (dhd_is_associated(dhd, NULL, &err) == FALSE)) {
-			WL_ERR(("NOT assoc: %d\n", err));
+		    (dhd_is_associated(dhd, NULL) == FALSE)) {
+			WL_ERR(("NOT assoc\n"));
 #ifdef ESCAN_RESULT_PATCH
 			return -ENODEV;
 #else
@@ -3409,9 +3406,9 @@ wl_cfg80211_get_station(struct wiphy *wiphy, struct net_device *dev,
 		WL_DBG(("RSSI %d dBm\n", rssi));
 
 get_station_err:
-		if (err && (err != -ETIMEDOUT) && (err != -EIO)) {
+		if (err) {
 			/* Disconnect due to zero BSSID or error to get RSSI */
-			WL_ERR(("force cfg80211_disconnected: %d\n", err));
+			WL_ERR(("force cfg80211_disconnected\n"));
 			wl_clr_drv_status(wl, CONNECTED, dev);
 			cfg80211_disconnected(dev, 0, NULL, 0, GFP_KERNEL);
 			wl_link_down(wl);
@@ -5173,11 +5170,12 @@ static s32 wl_inform_single_bss(struct wl_priv *wl, struct wl_bss_info *bi)
 		band = wiphy->bands[IEEE80211_BAND_2GHZ];
 	else
 		band = wiphy->bands[IEEE80211_BAND_5GHZ];
-	if (!band) {
-		WL_ERR(("No valid band"));
+
+	if(band==NULL) {
 		kfree(notif_bss_info);
-		return -EINVAL;
+		return err;
 	}
+
 	notif_bss_info->rssi = dtoh16(bi->RSSI);
 	memcpy(mgmt->bssid, &bi->BSSID, ETHER_ADDR_LEN);
 	mgmt_type = wl->active_scan ?
@@ -5384,10 +5382,7 @@ wl_notify_connect_status_ap(struct wl_priv *wl, struct net_device *ndev,
 			band = wiphy->bands[IEEE80211_BAND_2GHZ];
 		else
 			band = wiphy->bands[IEEE80211_BAND_5GHZ];
-		if (!band) {
-			WL_ERR(("No valid band"));
-			return -EINVAL;
-		}
+
 #if LINUX_VERSION_CODE == KERNEL_VERSION(2, 6, 38) && !defined(WL_COMPAT_WIRELESS)
 		freq = ieee80211_channel_to_frequency(channel);
 		(void)band->band;
@@ -6024,10 +6019,7 @@ wl_notify_rx_mgmt_frame(struct wl_priv *wl, struct net_device *ndev,
 		band = wiphy->bands[IEEE80211_BAND_2GHZ];
 	else
 		band = wiphy->bands[IEEE80211_BAND_5GHZ];
-	if (!band) {
-		WL_ERR(("No valid band"));
-		return -EINVAL;
-	}
+
 #if LINUX_VERSION_CODE == KERNEL_VERSION(2, 6, 38) && !defined(WL_COMPAT_WIRELESS)
 	freq = ieee80211_channel_to_frequency(channel);
 	(void)band->band;
@@ -7196,18 +7188,20 @@ static s32 wl_event_handler(void *data)
 	struct wl_priv *wl = NULL;
 	struct wl_event_q *e;
 	tsk_ctl_t *tsk = (tsk_ctl_t *)data;
-	int ret = 0;
+	int ret;
 
 	wl = (struct wl_priv *)tsk->parent;
-
-	DAEMONIZE("wl_event_handler");
-
+	DAEMONIZE("dhd_cfg80211_event");
 	complete(&tsk->completed);
 
-	while (down_interruptible (&tsk->sema) == 0) {
+	while ((ret = down_interruptible(&tsk->sema)) == 0) {
+		WL_DBG(("down the event sema\n"));
 		SMP_RD_BARRIER_DEPENDS();
-		if (tsk->terminated)
+		if (tsk->terminated) {
+			WL_ERR(("%s was terminated[%d] ret=%d\n",
+				__func__, __LINE__, ret));
 			break;
+		}
 		while ((e = wl_deq_event(wl))) {
 			WL_DBG(("event type (%d), if idx: %d\n", e->etype, e->emsg.ifidx));
 			/* All P2P device address related events comes on primary interface since
