@@ -1557,9 +1557,7 @@ wl_run_iscan(struct wl_iscan_ctrl *iscan, struct cfg80211_scan_request *request,
 		goto done;
 	}
 
-	if (request != NULL)
-		wl_scan_prep(&params->params, request);
-
+	wl_scan_prep(&params->params, request);
 	params->version = htod32(ISCAN_REQ_VERSION);
 	params->action = htod16(action);
 	params->scan_duration = htod16(0);
@@ -1699,8 +1697,7 @@ wl_run_escan(struct wl_priv *wl, struct net_device *ndev,
 			goto exit;
 		}
 
-		if (request != NULL)
-			wl_scan_prep(&params->params, request);
+		wl_scan_prep(&params->params, request);
 		params->version = htod32(ESCAN_REQ_VERSION);
 		params->action =  htod16(action);
 		params->sync_id = wl->escan_info.cur_sync_id;
@@ -3366,9 +3363,10 @@ wl_cfg80211_get_station(struct wiphy *wiphy, struct net_device *dev,
 #endif
 	} else if (wl_get_mode_by_netdev(wl, dev) == WL_MODE_BSS) {
 		u8 *curmacp = wl_read_prof(wl, dev, WL_PROF_BSSID);
+		err = -ENODEV;
 		if (!wl_get_drv_status(wl, CONNECTED, dev) ||
-		    (dhd_is_associated(dhd, NULL) == FALSE)) {
-			WL_ERR(("NOT assoc\n"));
+		    (dhd_is_associated(dhd, NULL, &err) == FALSE)) {
+			WL_ERR(("NOT assoc: %d\n", err));
 #ifdef ESCAN_RESULT_PATCH
 			return -ENODEV;
 #else
@@ -3406,9 +3404,9 @@ wl_cfg80211_get_station(struct wiphy *wiphy, struct net_device *dev,
 		WL_DBG(("RSSI %d dBm\n", rssi));
 
 get_station_err:
-		if (err) {
+		if (err && (err != -ETIMEDOUT) && (err != -EIO)) {
 			/* Disconnect due to zero BSSID or error to get RSSI */
-			WL_ERR(("force cfg80211_disconnected\n"));
+			WL_ERR(("force cfg80211_disconnected: %d\n", err));
 			wl_clr_drv_status(wl, CONNECTED, dev);
 			cfg80211_disconnected(dev, 0, NULL, 0, GFP_KERNEL);
 			wl_link_down(wl);
@@ -5170,12 +5168,11 @@ static s32 wl_inform_single_bss(struct wl_priv *wl, struct wl_bss_info *bi)
 		band = wiphy->bands[IEEE80211_BAND_2GHZ];
 	else
 		band = wiphy->bands[IEEE80211_BAND_5GHZ];
-
-	if(band==NULL) {
+	if (!band) {
+		WL_ERR(("No valid band"));
 		kfree(notif_bss_info);
-		return err;
+		return -EINVAL;
 	}
-
 	notif_bss_info->rssi = dtoh16(bi->RSSI);
 	memcpy(mgmt->bssid, &bi->BSSID, ETHER_ADDR_LEN);
 	mgmt_type = wl->active_scan ?
@@ -5382,7 +5379,10 @@ wl_notify_connect_status_ap(struct wl_priv *wl, struct net_device *ndev,
 			band = wiphy->bands[IEEE80211_BAND_2GHZ];
 		else
 			band = wiphy->bands[IEEE80211_BAND_5GHZ];
-
+		if (!band) {
+			WL_ERR(("No valid band"));
+			return -EINVAL;
+		}
 #if LINUX_VERSION_CODE == KERNEL_VERSION(2, 6, 38) && !defined(WL_COMPAT_WIRELESS)
 		freq = ieee80211_channel_to_frequency(channel);
 		(void)band->band;
@@ -6019,7 +6019,10 @@ wl_notify_rx_mgmt_frame(struct wl_priv *wl, struct net_device *ndev,
 		band = wiphy->bands[IEEE80211_BAND_2GHZ];
 	else
 		band = wiphy->bands[IEEE80211_BAND_5GHZ];
-
+	if (!band) {
+		WL_ERR(("No valid band"));
+		return -EINVAL;
+	}
 #if LINUX_VERSION_CODE == KERNEL_VERSION(2, 6, 38) && !defined(WL_COMPAT_WIRELESS)
 	freq = ieee80211_channel_to_frequency(channel);
 	(void)band->band;
