@@ -72,7 +72,6 @@
 #include <linux/ftrace.h>
 #include <linux/slab.h>
 #include <linux/cpuacct.h>
-#include <linux/sched.h>
 
 #include <asm/tlb.h>
 #include <asm/irq_regs.h>
@@ -1200,16 +1199,6 @@ static void resched_cpu(int cpu)
 	raw_spin_unlock_irqrestore(&rq->lock, flags);
 }
 
-void force_cpu_resched(int cpu)
-{
-       struct rq *rq = cpu_rq(cpu);
-       unsigned long flags;
-
-       raw_spin_lock_irqsave(&rq->lock, flags);
-       resched_task(cpu_curr(cpu));
-       raw_spin_unlock_irqrestore(&rq->lock, flags);
-}
-
 #ifdef CONFIG_NO_HZ
 /*
  * In the semi idle case, use the nearest busy cpu for migrating timers
@@ -1320,11 +1309,6 @@ static void sched_rt_avg_update(struct rq *rq, u64 rt_delta)
 
 static void sched_avg_update(struct rq *rq)
 {
-}
-
-void force_cpu_resched(int cpu)
-{
-       set_need_resched();
 }
 #endif /* CONFIG_SMP */
 
@@ -2916,24 +2900,6 @@ void sched_fork(struct task_struct *p)
 	put_cpu();
 }
 
-#ifdef CONFIG_PREEMPT_COUNT_CPU
-
-/*
- * Fetch the preempt count of some cpu's current task.  Must be called
- * with interrupts blocked.  Stale return value.
- *
- * No locking needed as this always wins the race with context-switch-out
- * + task destruction, since that is so heavyweight.  The smp_rmb() is
- * to protect the pointers in that race, not the data being pointed to
- * (which, being guaranteed stale, can stand a bit of fuzziness).
- */
-int preempt_count_cpu(int cpu)
-{
-       smp_rmb(); /* stop data prefetch until program ctr gets here */
-       return task_thread_info(cpu_curr(cpu))->preempt_count;
-}
-#endif
-
 /*
  * wake_up_new_task - wake up a newly created task for the first time.
  *
@@ -3436,12 +3402,9 @@ calc_load_n(unsigned long load, unsigned long exp,
  * Once we've updated the global active value, we need to apply the exponential
  * weights adjusted to the number of cycles missed.
  */
-static void calc_global_nohz(unsigned long ticks)
+static void calc_global_nohz(void)
 {
 	long delta, active, n;
-
-	if (time_before(jiffies, calc_load_update))
-		return;
 
 	/*
 	 * If we crossed a calc_load_update boundary, make sure to fold
@@ -3454,31 +3417,25 @@ static void calc_global_nohz(unsigned long ticks)
 		atomic_long_add(delta, &calc_load_tasks);
 
 	/*
-	 * If we were idle for multiple load cycles, apply them.
+	 * It could be the one fold was all it took, we done!
 	 */
-	if (ticks >= LOAD_FREQ) {
-		n = ticks / LOAD_FREQ;
-
-		active = atomic_long_read(&calc_load_tasks);
-		active = active > 0 ? active * FIXED_1 : 0;
-
-		avenrun[0] = calc_load_n(avenrun[0], EXP_1, active, n);
-		avenrun[1] = calc_load_n(avenrun[1], EXP_5, active, n);
-		avenrun[2] = calc_load_n(avenrun[2], EXP_15, active, n);
-
-		calc_load_update += n * LOAD_FREQ;
-	}
+	if (time_before(jiffies, calc_load_update + 10))
+		return;
 
 	/*
-	 * Its possible the remainder of the above division also crosses
-	 * a LOAD_FREQ period, the regular check in calc_global_load()
-	 * which comes after this will take care of that.
-	 *
-	 * Consider us being 11 ticks before a cycle completion, and us
-	 * sleeping for 4*LOAD_FREQ + 22 ticks, then the above code will
-	 * age us 4 cycles, and the test in calc_global_load() will
-	 * pick up the final one.
+	 * Catch-up, fold however many we are behind still
 	 */
+	delta = jiffies - calc_load_update - 10;
+	n = 1 + (delta / LOAD_FREQ);
+
+	active = atomic_long_read(&calc_load_tasks);
+	active = active > 0 ? active * FIXED_1 : 0;
+
+	avenrun[0] = calc_load_n(avenrun[0], EXP_1, active, n);
+	avenrun[1] = calc_load_n(avenrun[1], EXP_5, active, n);
+	avenrun[2] = calc_load_n(avenrun[2], EXP_15, active, n);
+
+	calc_load_update += n * LOAD_FREQ;
 }
 #else
 static void calc_load_account_idle(struct rq *this_rq)
@@ -3490,7 +3447,7 @@ static inline long calc_load_fold_idle(void)
 	return 0;
 }
 
-static void calc_global_nohz(unsigned long ticks)
+static void calc_global_nohz(void)
 {
 }
 #endif
@@ -3518,8 +3475,6 @@ void calc_global_load(unsigned long ticks)
 {
 	long active;
 
-	calc_global_nohz(ticks);
-
 	if (time_before(jiffies, calc_load_update + 10))
 		return;
 
@@ -3531,6 +3486,16 @@ void calc_global_load(unsigned long ticks)
 	avenrun[2] = calc_load(avenrun[2], EXP_15, active);
 
 	calc_load_update += LOAD_FREQ;
+
+	/*
+	 * Account one period with whatever state we found before
+	 * folding in the nohz state and ageing the entire idle period.
+	 *
+	 * This avoids loosing a sample when we go idle between
+	 * calc_load_account_active() (10 ticks ago) and now and thus
+	 * under-accounting.
+	 */
+	calc_global_nohz();
 }
 
 /*
@@ -4150,7 +4115,7 @@ void __kprobes add_preempt_count(int val)
 	if (DEBUG_LOCKS_WARN_ON((preempt_count() < 0)))
 		return;
 #endif
-	__add_preempt_count(val);
+	preempt_count() += val;
 #ifdef CONFIG_DEBUG_PREEMPT
 	/*
 	 * Spinlock count overflowing soon?
@@ -4181,7 +4146,7 @@ void __kprobes sub_preempt_count(int val)
 
 	if (preempt_count() == val)
 		trace_preempt_on(CALLER_ADDR0, get_parent_ip(CALLER_ADDR1));
-	__sub_preempt_count(val);
+	preempt_count() -= val;
 }
 EXPORT_SYMBOL(sub_preempt_count);
 
@@ -4322,9 +4287,6 @@ need_resched:
 	if (likely(prev != next)) {
 		rq->nr_switches++;
 		rq->curr = next;
-#ifdef CONFIG_PREEMPT_COUNT_CPU
-		smp_wmb();
-#endif
 		++*switch_count;
 
 		context_switch(rq, prev, next); /* unlocks the rq */
@@ -8378,9 +8340,6 @@ struct task_struct *curr_task(int cpu)
 void set_curr_task(int cpu, struct task_struct *p)
 {
 	cpu_curr(cpu) = p;
-#ifdef CONFIG_PREEMPT_COUNT_CPU
-	smp_wmb();
-#endif
 }
 
 #endif
