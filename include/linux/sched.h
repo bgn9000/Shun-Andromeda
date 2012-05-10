@@ -880,7 +880,6 @@ static inline int sd_balance_for_package_power(void)
 }
 
 extern int __weak arch_sd_sibiling_asym_packing(void);
-extern int __weak arch_sd_sibling_asym_packing(void);
 
 /*
  * Optimise SD flags for power savings:
@@ -1965,8 +1964,6 @@ extern void wake_up_idle_cpu(int cpu);
 #else
 static inline void wake_up_idle_cpu(int cpu) { }
 #endif
-
-extern void force_cpu_resched(int cpu);
 
 extern unsigned int sysctl_sched_latency;
 extern unsigned int sysctl_sched_min_granularity;
