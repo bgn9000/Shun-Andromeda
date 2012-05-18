@@ -12,13 +12,13 @@
              <spinnerItem name="Second core always-on" value="always-on"/> 
        </spinner>
        <seekBar description="second core will be enabled when the load goes above this threshold (default is 30)"
-                name="load_h0" action="generic /sys/module/stand_hotplug/parameters/load_h0" unit="%" min="0" reversed="false" step="1" max="50"/>
+                name="load_h0" action="generic /sys/module/stand_hotplug/parameters/load_h0" unit="%" min="0" reversed="false" step="1" max="35"/>
        <seekBar description="second core will be disabled when the load goes below this threshold (default is 20)"
-                name="load_l1" action="generic /sys/module/stand_hotplug/parameters/load_l1" unit="%" min="0" reversed="false" step="1" max="50"/>
+                name="load_l1" action="generic /sys/module/stand_hotplug/parameters/load_l1" unit="%" min="0" reversed="false" step="1" max="35"/>
        <seekBar description="(default is 2)"
                 name="min_rq" action="generic /sys/module/stand_hotplug/parameters/min_rq" unit="" min="0" reversed="false" step="1" max="2"/>
        <seekBar description="(default is 20)"
-                name="load_rq" action="generic /sys/module/stand_hotplug/parameters/load_rq" unit="%" min="5" reversed="false" step="1" max="50"/>
+                name="load_rq" action="generic /sys/module/stand_hotplug/parameters/load_rq" unit="%" min="5" reversed="false" step="1" max="35"/>
        <seekBar description="Sets hot plug sampling intervals for screen-on state (default is 100)"
                 name="rate" action="generic /sys/module/stand_hotplug/parameters/rate" unit=" jiffies" min="50" reversed="false" step="50" max="1000"/>
        <seekBar description="Sets the frequency below which second core will not be turned on, regardless of thresholds. (default: 100000)" 
@@ -37,15 +37,16 @@
             name="sched_mc" action="generic /sys/devices/system/cpu/sched_mc_power_savings" unit="" min="0" reversed="false" step="1" max="2"/>
     </settingsPane>
 
-    <settingsPane description="" 
-		name="CPU Smooth Scaling Settings">
-      <seekBar description="smooth_target controls both smooth-scaling and cpu throttling. Default value is 2 which corresponds to 1200MHz. If the cpu gets hot the cpu is throttled to L3(1000MHz) and L4(800MHz) depending on the temperature. If you decrease this value, both smooth scaling and throttling targets will decrease."
-            name="smooth_target" action="generic /sys/devices/system/cpu/cpu0/cpufreq/smooth_target" unit="" min="0" reversed="false" step="1" max="4"/>
-      <seekBar description="if smooth_target+smooth_offset is higher than the target frequency, minimum of current_freq-smooth_step or smooth_target+smooth_offset-smooth_step. Set this to 0 to disable smooth scaling."
-            name="smooth_offset" action="generic /sys/devices/system/cpu/cpu0/cpufreq/smooth_offset" unit="" min="0" reversed="false" step="1" max="4"/>
-      <seekBar description="step size for smooth_stepping"
-            name="smooth_step" action="generic /sys/devices/system/cpu/cpu0/cpufreq/smooth_step" unit="" min="0" reversed="false" step="1" max="4"/>
-    </settingsPane>
+    <!--settingsPane description=""
+		name="Undervolting">
+      <spinner description="Sets the CPU undervolting value which will be apploed during boot time only. It will not have any effect until you restart your device. Remember: if you change this value and your device doesn't boot you will have to reset extweaks settings using CWM recovery. This value will be applied to all CPU steps before any script or app execution. If you use any script or voltage control app this setting may be overriden by those." name="CPU Undervolting" action="generic /tmp/cpu_undervolting">
+             <spinnerItem name="No Undervolting" value="0"/> 
+             <spinnerItem name=" -25 mV" value="-25"/> 
+             <spinnerItem name=" -50 mV" value="-50"/> 
+             <spinnerItem name=" -75 mV" value="-75"/> 
+             <spinnerItem name="-100 mV" value="-100"/> 
+      </spinner>
+    </settingsPane-->
 
   </settingsTab>
 
@@ -118,7 +119,7 @@
     <settingsPane description="Brightness Curve settings which modify auto-brightness behavior." name="Brightness Curve">
        <seekBar description="Sets touchscreen move sensitivity (vitalij value)." 
 		name="TouchMove Sensitivity" action="generic /sys/devices/platform/s3c2440-i2c.3/i2c-3/3-004a/mov_hysti" unit=" pixel" min="0" reversed="false" step="1" max="20"/>
-       <seekBar description="Setting min_bl higher will result in staying lowest brightness level for brighter conditions (default 40)" 
+       <seekBar description="Setting min_bl higher will result in staying lowest brightness level for brighter conditions (default 30)" 
 		name="min_bl" action="generic /sys/class/misc/brightness_curve/min_bl" unit="" min="0" reversed="false" step="10" max="150"/>
        <seekBar description="Minimum brightness level (default 0)" 
 		name="min_gamma" action="generic /sys/class/misc/brightness_curve/min_gamma" unit="" min="0" reversed="false" step="1" max="24"/>
@@ -160,6 +161,8 @@
              <spinnerItem name="30 sec" value="30000"/> 
              <spinnerItem name="60 sec" value="60000"/> 
        </spinner>
+       <checkbox description="Led fadeout effect. If you are on a Samsung ROM, you need to set touchkey leds to always on or always off and use led timeout in ExTweaks." name="led-fadeout" action="generic /sys/class/misc/notification/led_fadeout" label="led-fadeout"/>
+       <checkbox description="Selecting this will activate turning touckey leds on when you touch the screen (only when led timeout is enabled)." name="Leds on with touch" action="generic /sys/class/misc/notification/led_on_touch" label="led-on-touch"/>
        <button description="Use this button to test bln. BLN will be active after you turn the screen off." name="Test BLN" action="test-bln" label="Test BLN"/>
        <seekBar description="Controls touchpad led voltage level (default: 3000)" 
 		name="Led Voltage Level" action="generic /sys/devices/virtual/sec/sec_touchkey/touchkey_brightness" unit=" mV" min="2500" reversed="false" step="50" max="3300"/>
@@ -197,8 +200,8 @@
     </settingsPane>
     <settingsPane description="Removing/Reinstalling root to support some apps which requires you not to have a rooted phone." name="Remove/Reinstall Root">
       <button description="Removes su and Superuser.apk files from the system partition" name="Remove Root" action="remove-root" label="Remove Root"/>
-      <button description="Tries to reinstall root. If this fails, please check auto-install root checkbox and reboot." name="Install  Root" action="install-root" label="Install Root"/>
-      <checkbox description="If checked, installs root on the next reboot." name="Auto-Install Root" action="generic /tmp/install_root" label="Auto-Install Root"/>
+      <button description="Tries to reinstall root. If this fails, please check auto-install root checkbox and restart." name="Install  Root" action="install-root" label="Install Root"/>
+      <checkbox description="If checked, installs root on the next restart." name="Auto-Install Root" action="generic /tmp/install_root" label="Auto-Install Root"/>
     </settingsPane>
   </settingsTab>
 

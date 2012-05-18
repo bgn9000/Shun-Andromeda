@@ -2,8 +2,7 @@ on early-init
     export EXTERNAL_STORAGE /mnt/sdcard
     mkdir /mnt/sdcard 0000 system system
     # for backwards compatibility
-    symlink /mnt/emmc /emmc
-    symlink /mnt/emmc /sdcard
+    symlink /mnt/sdcard /sdcard
 
 on boot
     setprop ARGH ARGH

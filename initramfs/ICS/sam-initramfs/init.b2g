@@ -15,14 +15,16 @@ loglevel 3
 
 # setup the global environment
     export PATH /sbin:/vendor/bin:/system/sbin:/system/bin:/system/xbin
-    export LD_LIBRARY_PATH /vendor/lib:/system/lib
+    export TMPDIR /data/local/tmp
+    export GRE_HOME /system/b2g
+    export LD_LIBRARY_PATH /vendor/lib:/system/lib:/system/b2g
     export ANDROID_BOOTLOGO 1
     export ANDROID_ROOT /system
     export ANDROID_ASSETS /system/app
     export ANDROID_DATA /data
     export ASEC_MOUNTPOINT /mnt/asec
     export LOOP_MOUNTPOINT /mnt/obb
-    export BOOTCLASSPATH /system/framework/core.jar:/system/framework/core-junit.jar:/system/framework/bouncycastle.jar:/system/framework/ext.jar:/system/framework/framework.jar:/system/framework/framework-miui.jar:/system/framework/framework2.jar:/system/framework/android.policy.jar:/system/framework/services.jar:/system/framework/apache-xml.jar:/system/framework/filterfw.jar:/system/framework/sechardware.jar
+    export BOOTCLASSPATH /system/framework/core.jar:/system/framework/core-junit.jar:/system/framework/bouncycastle.jar:/system/framework/ext.jar:/system/framework/framework.jar:/system/framework/framework2.jar:/system/framework/android.policy.jar:/system/framework/services.jar:/system/framework/apache-xml.jar:/system/framework/filterfw.jar
 
 # Disable CFQ slice idle delay
     write /sys/block/mmcblk0/queue/iosched/slice_idle 0
@@ -106,7 +108,9 @@ loglevel 3
 on fs
 # mount ext4 partitions
     # Mount /system rw first to give the filesystem a chance to save a checkpoint
-    mount ext4 /res/dev/system /system noatime wait ro
+    mount ext4 /res/dev/system /system noatime wait rw
+    chmod 0755 /system/b2g/b2g
+    chmod 0755 /system/b2g/updater
     
     exec sfsck /res/dev/cache ext4
     mount ext4 /res/dev/cache /cache nosuid nodev noatime wait
@@ -125,7 +129,7 @@ on fs
     chmod 0775 /efs/wifi
 
     # check encryption status, checking UMS & data should be excuted after this command 
-    exec check_encryption_status /res/dev/data
+    exec check_encryption_status /dev/block/mmcblk0p10
     
     # verfiy filesystem (UMS)
     exec sformat /dev/block/mmcblk0p11 vfat
@@ -594,6 +598,7 @@ on boot
 
     class_start core
     class_start main
+    class_start b2g
 
 on nonencrypted
     class_start late_start
@@ -708,8 +713,6 @@ service servicemanager /system/bin/servicemanager
     user system
     group system
     critical
-    onrestart restart zygote
-    onrestart restart media
 
 service vold /system/bin/vold
     class core
@@ -727,7 +730,7 @@ service debuggerd /system/bin/debuggerd
 
 service ril-daemon /system/bin/rild
     class main
-    socket rild stream 660 root radio
+    socket rild stream 666 root radio
     socket rild-debug stream 660 radio system
     user root
     group radio cache inet misc audio sdcard_rw log
@@ -747,6 +750,7 @@ service surfaceflinger /system/bin/surfaceflinger
     user system
     group graphics
     onrestart restart zygote
+    disabled
 
 service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-system-server
     class main
@@ -755,6 +759,7 @@ service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-sys
     onrestart write /sys/power/state on
     onrestart restart media
     onrestart restart netd
+    disabled
 
 service drm /system/bin/drmserver
     class main
@@ -899,6 +904,26 @@ service rtc_log /system/bin/sh /system/bin/rtc_log.sh
 #    class main
 #    user root
 #    oneshot
+
+service fakeperm /system/bin/fakeperm
+    class b2g
+    user root
+
+service b2g /system/b2g/b2g
+    class b2g
+    user root
+    onrestart restart media
+
+service rilproxy /system/bin/rilproxy
+    class b2g
+    socket rilproxy stream 660 root system
+    socket rilproxyd stream 660 root system
+    user root
+    group radio
+
+service mount-sdcard /system/bin/mountvol.sh sdcard
+    class b2g
+    oneshot
     
 # 2011-12-08/systemsw/kyo/ bugreport is triggered by holding down volume down, volume up and power
 service bugreport /system/bin/bugmailer.sh -v
