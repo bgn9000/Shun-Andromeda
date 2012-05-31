@@ -658,7 +658,7 @@ int exynos4x12_cpufreq_init(struct exynos_dvfs_info *info)
 
 	info->mpll_freq_khz = rate;
 	info->pm_lock_idx = L5;
-	info->pll_safe_idx = L7;
+	info->pll_safe_idx = L6;
 	info->max_support_idx = max_support_idx;
 	info->min_support_idx = min_support_idx;
 	info->cpu_clk = cpu_clk;
