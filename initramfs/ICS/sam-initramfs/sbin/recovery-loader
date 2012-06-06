@@ -26,6 +26,12 @@ stop tvout
 /sbin/ext/busybox chmod 777 /cache
 /sbin/ext/busybox mount -t ext4 /dev/block/mmcblk0p7 /cache
 
+/sbin/ext/busybox rm /system
+/sbin/ext/busybox mkdir /system
+/sbin/ext/busybox mount -t ext4 /res/dev/system /system
+/sbin/ext/busybox chmod 777 /res/images/
+/sbin/ext/busybox cp /system/.shun/myshunlogo.png /res/images/icon_clockwork.png
+
 #cd /
 #eval $(/sbin/read_boot_headers /dev/block/mmcblk0p5)
 #dd bs=512 if=/dev/block/mmcblk0p5 skip=$recovery_offset count=$recovery_len | busybox xzcat | busybox cpio -i
