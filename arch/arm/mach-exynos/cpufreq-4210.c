@@ -317,7 +317,7 @@ static void exynos4210_set_frequency(unsigned int old_index,
 static void __init set_volt_table(void)
 {
 	unsigned int asv_group = 0;
-	bool for_1400 = false, for_1200 = false, for_1000 = false;
+	bool for_1400 = false, for_1200 = false, for_1000 = false, for_800 = false;
 	unsigned int tmp;
 	unsigned int i;
 
@@ -339,8 +339,8 @@ static void __init set_volt_table(void)
 		max_support_idx = L3;
 		break;
 	default:
-		for_1000 = true;
-		max_support_idx = L3;
+		for_800 = true;
+		max_support_idx = L4;
 		break;
 	}
 
@@ -356,6 +356,12 @@ static void __init set_volt_table(void)
 
 	if (for_1000)
 		exynos4210_freq_table[L2].frequency = CPUFREQ_ENTRY_INVALID;
+		
+	if (for_800)
+	{
+		exynos4210_freq_table[L2].frequency = CPUFREQ_ENTRY_INVALID;
+		exynos4210_freq_table[L3].frequency = CPUFREQ_ENTRY_INVALID;
+	}
 
 	printk(KERN_INFO "DVFS : VDD_ARM Voltage table set with %d Group\n", asv_group);
 
@@ -443,8 +449,8 @@ int exynos4210_cpufreq_init(struct exynos_dvfs_info *info)
 	}
 
 	info->mpll_freq_khz = rate;
-	info->pm_lock_idx = L4;
-	info->pll_safe_idx = L3;
+	info->pm_lock_idx = L5;
+	info->pll_safe_idx = L4;
 	info->max_support_idx = max_support_idx;
 	info->min_support_idx = min_support_idx;
 	info->cpu_clk = cpu_clk;

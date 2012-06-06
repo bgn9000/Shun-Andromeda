@@ -434,7 +434,7 @@ static int exynos4_buspm_notifier_event(struct notifier_block *this,
 {
 	switch (event) {
 	case PM_SUSPEND_PREPARE:
-		exynos4_busfreq_lock(DVFS_LOCK_ID_PM, BUS_L0);
+		exynos4_busfreq_lock(DVFS_LOCK_ID_PM, BUS_L1);
 		return NOTIFY_OK;
 	case PM_POST_RESTORE:
 	case PM_POST_SUSPEND:
@@ -452,7 +452,7 @@ static struct notifier_block exynos4_buspm_notifier = {
 static int exynos4_busfreq_reboot_notify(struct notifier_block *this,
 		unsigned long code, void *unused)
 {
-	if (exynos4_busfreq_lock(DVFS_LOCK_ID_PM, BUS_L0) < 0)
+	if (exynos4_busfreq_lock(DVFS_LOCK_ID_PM, BUS_L1) < 0)
 		return NOTIFY_BAD;
 
 	printk(KERN_INFO "REBOOT Notifier for BUSFREQ\n");
