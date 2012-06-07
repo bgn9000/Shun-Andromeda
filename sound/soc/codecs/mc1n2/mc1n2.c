@@ -46,7 +46,7 @@
 /* CONFIG_TARGET_LOCALE_NAATT_TEMP is intentionally introduced temporarily*/
 
 #include "mc1n2_cfg_gsm.h"
-#elif defined(CONFIG_MACH_Q1_REV00) || defined(CONFIG_MACH_Q1_REV02)
+#elif defined(CONFIG_MACH_Q1_BD)
 #include "mc1n2_cfg_q1.h"
 #elif defined(CONFIG_MACH_U1_KOR_LGT)
 #include "mc1n2_cfg_lgt.h"
@@ -3715,7 +3715,9 @@ static int mc1n2_hwdep_ioctl_set_path(struct snd_soc_codec *codec,
 		audio_ctrl_mic_bias_gpio(mc1n2->pdata, MAIN_MIC, 0);
 	} else {
 		audio_ctrl_mic_bias_gpio(mc1n2->pdata, MAIN_MIC, 1);
-		mdelay(mc1n2->delay_mic1in);
+		if(mc1n2->delay_mic1in > 0) {
+			msleep(mc1n2->delay_mic1in);
+		}
 	}
 
 	if ((path->asAdc0[0].abSrcOnOff[0] & MCDRV_SRC0_MIC3_OFF) && (path->asAdc0[1].abSrcOnOff[0] & MCDRV_SRC0_MIC3_OFF)) {
