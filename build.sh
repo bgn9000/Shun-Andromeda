@@ -11,7 +11,9 @@ export ARCH=arm
 #export CROSS_COMPILE=$PARENT_DIR/arm-2011/bin_452/arm-none-linux-gnueabi-
 export CONFIG_CC_OPTIMIZE_FOR_FAST=1
 # GCC 4.6.3
-export CROSS_COMPILE=$PARENT_DIR/arm-2012/bin_463/arm-linux-gnueabi-
+#export CROSS_COMPILE=$PARENT_DIR/arm-2012/bin_463/arm-linux-gnueabi-
+# GCC 4.7.1
+export CROSS_COMPILE=$PARENT_DIR/arm-2012/bin_471/arm-linux-gnueabihf-
 
 echo config...
 if [ ! -f $KERNELDIR/.config ];
@@ -62,7 +64,7 @@ cd -
 
 echo compiling kernel...
 nice -n 10 make -j3 zImage CONFIG_INITRAMFS_SOURCE="$INITRAMFS_TMP.cpio" || exit 1
-$PARENT_DIR/mkshbootimg.py $KERNELDIR/zImage $KERNELDIR/arch/arm/boot/zImage $PARENT_DIR/payload.tar
+$KERNELDIR/mkshbootimg.py $KERNELDIR/zImage $KERNELDIR/arch/arm/boot/zImage $KERNELDIR/payload.tar
 
 if [ "${3}" == "ATT" ];then
 	mv $KERNELDIR/zImage $KERNELDIR/zImage-att-$CIBLE
