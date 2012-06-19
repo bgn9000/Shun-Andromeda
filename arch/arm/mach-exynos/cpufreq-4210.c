@@ -449,7 +449,7 @@ int exynos4210_cpufreq_init(struct exynos_dvfs_info *info)
 	}
 
 	info->mpll_freq_khz = rate;
-	info->pm_lock_idx = L5;
+	info->pm_lock_idx = L4;
 	info->pll_safe_idx = L4;
 	info->max_support_idx = max_support_idx;
 	info->min_support_idx = min_support_idx;
