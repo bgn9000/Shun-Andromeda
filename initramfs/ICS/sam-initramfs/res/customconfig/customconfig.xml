@@ -194,8 +194,9 @@
              <spinnerItem name="200MHz" value="200000"/> 
       </spinner>
       <spinner description="This will set the default CPU governor. Default CPU governor will only be set during early stages of booting (before init.d execution) and can be overriden by later scripts or apps." name="Default CPU Governor" action="generic /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor">
-             <spinnerItem name="ondemand" value="ondemand"/> 
-             <spinnerItem name="conservative" value="conservative"/> 
+             <spinnerItem name="ondemand" value="ondemand"/>
+             <spinnerItem name="conservative" value="conservative"/>
+	     <spinnerItem name="abyssplug" value="abyssplug"/>
              <spinnerItem name="lulzactive" value="lulzactive"/> 
       </spinner>
       <spinner description="This will set the default I/O scheduler. Default I/O scheduler will only be set during early stages of booting (before init.d execution) and can be overriden by later scripts or apps." name="Default I/O Scheduler" action="generic /sys/block/mmcblk0/queue/scheduler">
