@@ -4002,7 +4002,7 @@ static void mxt224_power_off(void)
 #define MXT224_THRESHOLD_CHRG		55
 #define MXT224_NOISE_THRESHOLD_BATT		30
 #define MXT224_NOISE_THRESHOLD_CHRG		40
-#define MXT224_MOVFILTER_BATT		30
+#define MXT224_MOVFILTER_BATT		11
 #define MXT224_MOVFILTER_CHRG		47
 #define MXT224_ATCHCALST		4
 #define MXT224_ATCHCALTHR		35
@@ -5421,9 +5421,13 @@ static struct platform_device ram_console_device = {
 	.resource = ram_console_resource,
 };
 
+#define RAM_CONSOLE_CMDLINE ("0x100000@0x5e900000")
+
 static int __init setup_ram_console_mem(char *str)
 {
-	unsigned size = memparse(str, &str);
+	unsigned size;
+	str = RAM_CONSOLE_CMDLINE;
+	size = memparse(str, &str);
 
 	if (size && (*str == '@')) {
 		unsigned long long base = 0;
@@ -5442,7 +5446,12 @@ static int __init setup_ram_console_mem(char *str)
 	return 0;
 }
 
-__setup("ram_console=", setup_ram_console_mem);
+/* without modifying the bootloader or harcoding cmdlines (which can mess up reboots), no way to pass 
+   a ram_console command line.  Just work around that little issue by triggering on a different parameter
+   and hardcoding the parameters to ram_console in the function */
+__setup("loglevel=", setup_ram_console_mem);
+
+/* __setup("ram_console=", setup_ram_console_mem); */
 #endif
 
 #ifdef CONFIG_ANDROID_PMEM
@@ -5828,9 +5837,9 @@ static struct platform_device *smdkc210_devices[] __initdata = {
 #ifdef CONFIG_EXYNOS4_SETUP_THERMAL
 /* below temperature base on the celcius degree */
 struct s5p_platform_tmu u1_tmu_data __initdata = {
-	.ts = { //use 4x12 values -gm
-		.stop_1st_throttle  = 78,
-		.start_1st_throttle = 80,
+	.ts = {
+		.stop_1st_throttle  = 61,
+		.start_1st_throttle = 64,
 		.stop_2nd_throttle  = 87,
 		.start_2nd_throttle = 103,
 		.start_tripping     = 110,
@@ -6107,14 +6116,6 @@ static void __init smdkc210_map_io(void)
 	exynos4_reserve_mem();
 #else
 	s5p_reserve_mem(S5P_RANGE_MFC);
-#endif
-
-#ifdef CONFIG_ANDROID_RAM_CONSOLE
-if (!reserve_bootmem(0x4d900000, (1 << CONFIG_LOG_BUF_SHIFT), BOOTMEM_EXCLUSIVE)) {
-	ram_console_resource[0].start = 0x4d900000;
-    ram_console_resource[0].end = ram_console_resource[0].start + (1 << CONFIG_LOG_BUF_SHIFT) - 1;
-    pr_err("%s ram_console_resource[0].start: %x, end: %x\n", __func__, ram_console_resource[0].start, ram_console_resource[0].end);	
-}
 #endif
 
 	/* as soon as INFORM3 is visible, sec_debug is ready to run */

@@ -85,16 +85,15 @@ static unsigned int exynos_get_safe_armvolt(unsigned int old_index, unsigned int
 	return safe_arm_volt;
 }
 
-unsigned int smooth_target = L2;
-unsigned int smooth_offset = 2;
-unsigned int smooth_step = 2;
+unsigned int smooth_level = L4;
+
 static int exynos_target(struct cpufreq_policy *policy,
 			  unsigned int target_freq,
 			  unsigned int relation)
 {
-	unsigned int index, old_index;
+	unsigned int index, old_index = UINT_MAX;
 	unsigned int arm_volt, safe_arm_volt = 0;
-	int ret = 0;
+	int ret = 0, i;
 	struct cpufreq_frequency_table *freq_table = exynos_info->freq_table;
 	unsigned int *volt_table = exynos_info->volt_table;
 
@@ -103,22 +102,19 @@ static int exynos_target(struct cpufreq_policy *policy,
 	if (exynos_cpufreq_disable)
 		goto out;
 
-	freqs.old = exynos_getspeed(policy->cpu);
+	freqs.old = policy->cur;
 
-	if(policy->max < freqs.old || policy->min > freqs.old)
-	{
-		struct cpufreq_policy policytemp;
-		memcpy(&policytemp, policy, sizeof(struct cpufreq_policy));
-		policytemp.max = freqs.old;
-		policytemp.min = freqs.old;
-		if (cpufreq_frequency_table_target(&policytemp, freq_table,
-						   freqs.old, relation, &old_index)) {
-			ret = -EINVAL;
-			goto out;
-		}
-	} else
-	if (cpufreq_frequency_table_target(policy, freq_table,
-					   freqs.old, relation, &old_index)) {
+	/*
+	 * cpufreq_frequency_table_target() cannot be used for freqs.old
+	 * because policy->min/max may have been changed. If changed, the
+	 * resulting old_index may be inconsistent with freqs.old, which
+	 * will lead to inconsistent voltage/frequency configurations later.
+	 */
+	for (i = 0; freq_table[i].frequency != CPUFREQ_TABLE_END; i++) {
+		if (freq_table[i].frequency == freqs.old)
+			old_index = freq_table[i].index;
+	}
+	if (old_index == UINT_MAX) {
 		ret = -EINVAL;
 		goto out;
 	}
@@ -129,24 +125,17 @@ static int exynos_target(struct cpufreq_policy *policy,
 		goto out;
 	}
 
-/* prevent freqs going above max policy - originally by netarchy */
-	if(exynos_info->max_current_idx > index)
-		index = exynos_info->max_current_idx;
-
 	/* Need to set performance limitation */
 	if (!exynos_cpufreq_lock_disable && (index > g_cpufreq_lock_level))
 		index = g_cpufreq_lock_level;
 
-	if (index < g_cpufreq_limit_level)
+	if (!exynos_cpufreq_lock_disable && (index < g_cpufreq_limit_level))
 		index = g_cpufreq_limit_level;
 
 #if defined(CONFIG_CPU_EXYNOS4210)
 	/* Do NOT step up max arm clock directly to reduce power consumption */
-	//reach 1200MHz step by step starting from 800MHz -gm
-	if(index <= smooth_target && index < old_index)
-	{
-		index = max(index,min(smooth_target + smooth_offset, old_index - smooth_step));
-	}
+	if (index == exynos_info->max_current_idx && old_index > smooth_level)
+		index = max(smooth_level, exynos_info->max_current_idx);
 #endif
 
 	freqs.new = freq_table[index].frequency;
@@ -220,7 +209,7 @@ atomic_t exynos_cpufreq_lock_count;
 int exynos_cpufreq_lock(unsigned int nId,
 			 enum cpufreq_level_index cpufreq_level)
 {
-	int ret = 0, i, old_idx = 0;
+	int ret = 0, i, old_idx = -EINVAL;
 	unsigned int freq_old, freq_new, arm_volt, safe_arm_volt;
 	unsigned int *volt_table;
 	struct cpufreq_policy *policy;
@@ -232,6 +221,18 @@ int exynos_cpufreq_lock(unsigned int nId,
 	if (!exynos_info)
 		return -EPERM;
 
+	if (exynos_cpufreq_disable) {
+		pr_info("CPUFreq is already fixed\n");
+		return -EPERM;
+	}
+
+	if (cpufreq_level < min(exynos_info->max_current_idx, exynos_info->pm_lock_idx)
+			|| cpufreq_level > exynos_info->min_support_idx) {
+		pr_warn("%s: invalid cpufreq_level(%d:%d)\n", __func__, nId,
+				cpufreq_level);
+		return -EINVAL;
+	}
+
 	policy = cpufreq_cpu_get(0);
 	if (!policy)
 		return -EPERM;
@@ -239,21 +240,14 @@ int exynos_cpufreq_lock(unsigned int nId,
 	volt_table = exynos_info->volt_table;
 	freq_table = exynos_info->freq_table;
 
+	mutex_lock(&set_cpu_freq_lock);
 	if (g_cpufreq_lock_id & (1 << nId)) {
 		printk(KERN_ERR "%s:Device [%d] already locked cpufreq\n",
 				__func__,  nId);
+		mutex_unlock(&set_cpu_freq_lock);
 		return 0;
 	}
 
-	volt_table = exynos_info->volt_table;
-	policy = cpufreq_cpu_get(0);
-	freq_table = exynos_info->freq_table;
-
-	//do not lock to higher than max_current_idx or lower than L3 -gm
-	cpufreq_level = max( min(exynos_info->max_current_idx, exynos_info->pll_safe_idx) ,
-							(int)cpufreq_level);
-
-	mutex_lock(&set_cpu_freq_lock);
 	g_cpufreq_lock_id |= (1 << nId);
 	g_cpufreq_lock_val[nId] = cpufreq_level;
 
@@ -281,19 +275,18 @@ int exynos_cpufreq_lock(unsigned int nId,
 	freq_new = freq_table[cpufreq_level].frequency;
 	if (freq_old < freq_new) {
 		/* Find out current level index */
-		for (i = 0 ; i <= exynos_info->min_support_idx;  i++) {
+		for (i = 0; freq_table[i].frequency != CPUFREQ_TABLE_END; i++) {
 			if (freq_old == freq_table[i].frequency) {
 				old_idx = freq_table[i].index;
 				break;
-			} else if (i == exynos_info->min_support_idx) {
-				printk(KERN_ERR "%s: Level not found\n",
-					__func__);
-				mutex_unlock(&set_freq_lock);
-				return -EINVAL;
-			} else {
-				continue;
 			}
 		}
+		if (old_idx == -EINVAL) {
+			printk(KERN_ERR "%s: Level not found\n", __func__);
+			mutex_unlock(&set_freq_lock);
+			return -EINVAL;
+		}
+
 		freqs.old = freq_old;
 		freqs.new = freq_new;
 		cpufreq_notify_transition(&freqs, CPUFREQ_PRECHANGE);
@@ -354,6 +347,18 @@ int exynos_cpufreq_upper_limit(unsigned int nId,
 	if (!exynos_info)
 		return -EPERM;
 
+	if (exynos_cpufreq_disable) {
+		pr_info("CPUFreq is already fixed\n");
+		return -EPERM;
+	}
+
+	if (cpufreq_level < min(exynos_info->max_current_idx, exynos_info->pm_lock_idx)
+			|| cpufreq_level > exynos_info->min_support_idx) {
+		pr_warn("%s: invalid cpufreq_level(%d:%d)\n", __func__, nId,
+				cpufreq_level);
+		return -EINVAL;
+	}
+
 	policy = cpufreq_cpu_get(0);
 	if (!policy)
 		return -EPERM;
@@ -361,16 +366,13 @@ int exynos_cpufreq_upper_limit(unsigned int nId,
 	volt_table = exynos_info->volt_table;
 	freq_table = exynos_info->freq_table;
 
+	mutex_lock(&set_cpu_freq_lock);
 	if (g_cpufreq_limit_id & (1 << nId)) {
 		pr_err("[CPUFREQ]This device [%d] already limited cpufreq\n", nId);
+		mutex_unlock(&set_cpu_freq_lock);
 		return 0;
 	}
 
-	volt_table = exynos_info->volt_table;
-	policy = cpufreq_cpu_get(0);
-	freq_table = exynos_info->freq_table;
-
-	mutex_lock(&set_cpu_freq_lock);
 	g_cpufreq_limit_id |= (1 << nId);
 	g_cpufreq_limit_val[nId] = cpufreq_level;
 
@@ -443,6 +445,46 @@ void exynos_cpufreq_upper_limit_free(unsigned int nId)
 	mutex_unlock(&set_cpu_freq_lock);
 }
 
+/* This API serve highest priority level locking */
+int exynos_cpufreq_level_fix(unsigned int freq)
+{
+	struct cpufreq_policy *policy;
+	int ret = 0;
+
+	if (!exynos_cpufreq_init_done)
+		return -EPERM;
+
+	policy = cpufreq_cpu_get(0);
+	if (!policy)
+		return -EPERM;
+
+	if (exynos_cpufreq_disable) {
+		pr_info("CPUFreq is already fixed\n");
+		return -EPERM;
+	}
+	ret = exynos_target(policy, freq, CPUFREQ_RELATION_L);
+
+	exynos_cpufreq_disable = true;
+	return ret;
+
+}
+EXPORT_SYMBOL_GPL(exynos_cpufreq_level_fix);
+
+void exynos_cpufreq_level_unfix(void)
+{
+	if (!exynos_cpufreq_init_done)
+		return;
+
+	exynos_cpufreq_disable = false;
+}
+EXPORT_SYMBOL_GPL(exynos_cpufreq_level_unfix);
+
+int exynos_cpufreq_is_fixed(void)
+{
+	return exynos_cpufreq_disable;
+}
+EXPORT_SYMBOL_GPL(exynos_cpufreq_is_fixed);
+
 #ifdef CONFIG_PM
 static int exynos_cpufreq_suspend(struct cpufreq_policy *policy)
 {
@@ -455,17 +497,42 @@ static int exynos_cpufreq_resume(struct cpufreq_policy *policy)
 }
 #endif
 
+static void exynos_save_gov_freq(void)
+{
+	unsigned int cpu = 0;
+
+	exynos_info->gov_support_freq = exynos_getspeed(cpu);
+	pr_debug("cur_freq[%d] saved to freq[%d]\n", exynos_getspeed(0),
+			exynos_info->gov_support_freq);
+}
+
+static void exynos_restore_gov_freq(struct cpufreq_policy *policy)
+{
+	unsigned int cpu = 0;
+
+	if (exynos_getspeed(cpu) != exynos_info->gov_support_freq)
+		exynos_target(policy, exynos_info->gov_support_freq,
+				CPUFREQ_RELATION_H);
+
+	pr_debug("freq[%d] restored to cur_freq[%d]\n",
+			exynos_info->gov_support_freq, exynos_getspeed(cpu));
+}
+
 static int exynos_cpufreq_notifier_event(struct notifier_block *this,
 		unsigned long event, void *ptr)
 {
 	int ret = 0;
-	unsigned int safe_arm_volt, arm_volt;
-	unsigned int *volt_table;
-
-	volt_table = exynos_info->volt_table;
+	unsigned int cpu = 0;
+	struct cpufreq_policy *policy = cpufreq_cpu_get(cpu);
 
 	switch (event) {
 	case PM_SUSPEND_PREPARE:
+		/* If current governor is userspace or performance or powersave,
+		 * save the current cpufreq before sleep.
+		 */
+		if (exynos_cpufreq_lock_disable)
+			exynos_save_gov_freq();
+
 		ret = exynos_cpufreq_lock(DVFS_LOCK_ID_PM,
 					   exynos_info->pm_lock_idx);
 		if (ret < 0)
@@ -488,26 +555,12 @@ static int exynos_cpufreq_notifier_event(struct notifier_block *this,
 #if defined(CONFIG_CPU_EXYNOS4210)
 		exynos_cpufreq_upper_limit_free(DVFS_LOCK_ID_PM);
 #endif
-		// In case of using performance governor,
-		// max level should be used after sleep and wakeup
-		if (exynos_cpufreq_lock_disable) {
-			mutex_lock(&set_freq_lock);
-
-			/* get the voltage value */
-			safe_arm_volt = exynos_get_safe_armvolt(exynos_info->pm_lock_idx, exynos_info->max_current_idx);
-			if (safe_arm_volt)
-				regulator_set_voltage(arm_regulator, safe_arm_volt,
-					safe_arm_volt + 25000);
-
-			arm_volt = volt_table[exynos_info->max_current_idx];
-			regulator_set_voltage(arm_regulator, arm_volt,
-				arm_volt + 25000);
-
-			exynos_info->set_freq(exynos_info->pm_lock_idx, exynos_info->max_current_idx);
-
-			mutex_unlock(&set_freq_lock);
-		}
 		exynos_cpufreq_disable = false;
+		/* If current governor is userspace or performance or powersave,
+		 * restore the saved cpufreq after waekup.
+		 */
+		if (exynos_cpufreq_lock_disable)
+			exynos_restore_gov_freq(policy);
 
 		return NOTIFY_OK;
 	}
@@ -516,14 +569,13 @@ static int exynos_cpufreq_notifier_event(struct notifier_block *this,
 
 static struct notifier_block exynos_cpufreq_notifier = {
 	.notifier_call = exynos_cpufreq_notifier_event,
-	.priority = INT_MIN, /* done last */
 };
 
 static int exynos_cpufreq_policy_notifier_call(struct notifier_block *this,
 				unsigned long code, void *data)
 {
 	struct cpufreq_policy *policy = data;
-	enum cpufreq_level_index level;
+	enum cpufreq_level_index level = 0;
 
 	switch (code) {
 	case CPUFREQ_ADJUST:
@@ -581,15 +633,9 @@ static int exynos_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	ret = cpufreq_frequency_table_cpuinfo(policy, exynos_info->freq_table);
 	/* set safe default min and max speeds - netarchy */
 	policy->max = exynos_info->freq_table[exynos_info->max_current_idx].frequency;
-	policy->min = 200 * 1000;
+	policy->min = exynos_info->freq_table[exynos_info->min_current_idx].frequency;
 	return ret;
 }
-
-/* Make sure we have the scaling_available_freqs sysfs file */
-static struct freq_attr *exynos_cpufreq_attr[] = {
-        &cpufreq_freq_attr_scaling_available_freqs,
-        NULL,
-}; 
 
 static int exynos_cpufreq_reboot_notifier_call(struct notifier_block *this,
 				   unsigned long code, void *_cmd)
@@ -606,6 +652,12 @@ static int exynos_cpufreq_reboot_notifier_call(struct notifier_block *this,
 
 static struct notifier_block exynos_cpufreq_reboot_notifier = {
 	.notifier_call = exynos_cpufreq_reboot_notifier_call,
+};
+
+/* Make sure we populate scaling_available_freqs in sysfs - netarchy */
+static struct freq_attr *exynos_cpufreq_attr[] = {
+  &cpufreq_freq_attr_scaling_available_freqs,
+  NULL,
 };
 
 static struct cpufreq_driver exynos_driver = {
@@ -691,27 +743,19 @@ err_vdd_arm:
 }
 late_initcall(exynos_cpufreq_init);
 
-
-ssize_t show_UV_mV_table(struct cpufreq_policy *policy, char *buf) {
-int i, len = 0;
-if (buf)
+ssize_t show_UV_mV_table(struct cpufreq_policy *policy, char *buf)
 {
-for (i = exynos_info->max_support_idx; i<=exynos_info->min_support_idx; i++)
-{
-if(exynos_info->freq_table[i].frequency==CPUFREQ_ENTRY_INVALID) continue;
-len += sprintf(buf + len, "%dmhz: %d mV\n", exynos_info->freq_table[i].frequency/1000,exynos_info->volt_table[i]/1000);
+	int i, len = 0;
+	if (buf)
+	{
+		for (i = exynos_info->max_support_idx; i<=exynos_info->min_support_idx; i++)
+		{
+			if(exynos_info->freq_table[i].frequency==CPUFREQ_ENTRY_INVALID) continue;
+			len += sprintf(buf + len, "%dmhz: %d mV\n", exynos_info->freq_table[i].frequency/1000,exynos_info->volt_table[i]/1000);
+		}
+	}
+	return len;
 }
-}
-return len;
-}
-
-
-#define VREF_SEL     1	/* 0: 0.625V (50mV step), 1: 0.3125V (25mV step). */
-#define V_STEP       (25 * (2 - VREF_SEL)) /* Minimum voltage step size. */
-#define VREG_DATA    (VREG_CONFIG | (VREF_SEL << 5))
-#define VREG_CONFIG  (BIT(7) | BIT(6)) /* Enable VREG, pull-down if disabled. */
-/* Cause a compile error if the voltage is not a multiple of the step size. */
-#define MV(mv)      ((mv) / (!((mv) % V_STEP)))
 
 ssize_t acpuclk_get_vdd_levels_str(char *buf)
 {
@@ -721,7 +765,7 @@ if (buf)
 for (i = exynos_info->max_support_idx; i<=exynos_info->min_support_idx; i++)
 {
 if(exynos_info->freq_table[i].frequency==CPUFREQ_ENTRY_INVALID) continue;
-len += sprintf(buf + len, "%8u: %4d\n", exynos_info->freq_table[i].frequency, exynos_info->volt_table[i]);
+len += sprintf(buf + len, "%8u: %4d\n", exynos_info->freq_table[i].frequency, exynos_info->volt_table[i] / 1000);
 }
 }
 return len;
@@ -731,14 +775,13 @@ void acpuclk_set_vdd(unsigned int khz, unsigned int vdd)
 {
 int i;
 unsigned int new_vdd;
-vdd = vdd / V_STEP * V_STEP;
 for (i = exynos_info->max_support_idx; i<=exynos_info->min_support_idx; i++)
 {
 if(exynos_info->freq_table[i].frequency==CPUFREQ_ENTRY_INVALID) continue;
 if (khz == 0)
-new_vdd = min(max((unsigned int)(exynos_info->volt_table[i] + vdd), (unsigned int)CPU_UV_MV_MIN), (unsigned int)CPU_UV_MV_MAX);
+new_vdd = min(max((unsigned int)(exynos_info->volt_table[i] + vdd * 1000), (unsigned int)CPU_UV_MV_MIN), (unsigned int)CPU_UV_MV_MAX);
 else if (exynos_info->freq_table[i].frequency == khz)
-new_vdd = min(max((unsigned int)vdd, (unsigned int)CPU_UV_MV_MIN), (unsigned int)CPU_UV_MV_MAX);
+new_vdd = min(max((unsigned int)vdd * 1000, (unsigned int)CPU_UV_MV_MIN), (unsigned int)CPU_UV_MV_MAX);
 else continue;
 
 exynos_info->volt_table[i] = new_vdd;
@@ -746,76 +789,161 @@ exynos_info->volt_table[i] = new_vdd;
 }
 
 ssize_t store_UV_mV_table(struct cpufreq_policy *policy,
-                                      const char *buf, size_t count) {
+                                      const char *buf, size_t count)
+{
+	int i = 0;
+	int j = 0;
+	int u[18] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 } , stepcount = 0, tokencount = 0;
 
-      unsigned int ret = -EINVAL;
-      int i = 0;
-	  int u[8];
-      ret = sscanf(buf, "%d %d %d %d %d %d %d %d", &u[0], &u[1], &u[2], &u[3], &u[4], &u[5], &u[6], &u[7]);
-	  if(ret != 8) {
-	      ret = sscanf(buf, "%d %d %d %d %d %d %d", &u[0], &u[1], &u[2], &u[3], &u[4], &u[5], &u[6]);
-		  if(ret != 7) {
-		      ret = sscanf(buf, "%d %d %d %d %d %d", &u[1], &u[2], &u[3], &u[4], &u[5], &u[6]);
-			  if( ret != 6) return -EINVAL;
-		  }
-	  }
-		for( i = 0; i < 8; i++ )
+	if(count < 1) return -EINVAL;
+
+	//parse input... time to miss strtok... -gm
+	for(j = 0; i < count; i++)
+	{
+		char c = buf[i];
+		if(c >= '0' && c <= '9')
 		{
-			if (u[i] > CPU_UV_MV_MAX / 1000)
+			if(tokencount < j + 1) tokencount = j + 1;
+			u[j] *= 10;
+			u[j] += (c - '0');
+		}
+		else if(c == ' ' || c == '\t')
+		{
+			if(u[j] != 0)
 			{
-				u[i] = CPU_UV_MV_MAX / 1000;
-			}
-			else if (u[i] < CPU_UV_MV_MIN / 1000)
-			{
-				u[i] = CPU_UV_MV_MIN / 1000;
+				j++;
 			}
 		}
-		if(ret >= 7) exynos_info->volt_table[0] = u[0] * 1000;
-		exynos_info->volt_table[1] = u[1] * 1000; 
-		exynos_info->volt_table[2] = u[2] * 1000;
-		exynos_info->volt_table[3] = u[3] * 1000; 
-		exynos_info->volt_table[4] = u[4] * 1000;
-		exynos_info->volt_table[5] = u[5] * 1000; 
-		exynos_info->volt_table[6] = u[6] * 1000;
-		if(ret == 8) exynos_info->volt_table[7] = u[7] * 1000;
-		return count;
-}
-extern unsigned int smooth_step;
-ssize_t show_smooth_step(struct cpufreq_policy *policy, char *buf) {
-      return sprintf(buf, "%d\n", smooth_step);
-}
-ssize_t store_smooth_step(struct cpufreq_policy *policy,
-                                      const char *buf, size_t count) {
-	unsigned int ret = -EINVAL, level;
-	ret = sscanf(buf, "%d", &level);
-	if(ret!=1) return -EINVAL;
-	if(level<0 || level>4) return -EINVAL;
-	smooth_step = level;
+		else
+			break;
+	}
+	
+	//find number of available steps
+	for(i = exynos_info->max_support_idx; i<=exynos_info->min_support_idx; i++)
+	{
+		if(exynos_info->freq_table[i].frequency==CPUFREQ_ENTRY_INVALID) continue;
+		stepcount++;
+	}
+	//do not keep backward compatibility for scripts this time.
+	//I want the number of tokens to be exactly the same with stepcount -gm
+	if(stepcount != tokencount) return -EINVAL;
+	
+	//we have u[0] starting from the first available frequency to u[stepcount]
+	//that is why we use an additiona j here...
+	for(j=0, i = exynos_info->max_support_idx; i<=exynos_info->min_support_idx; i++)
+	{
+		if(exynos_info->freq_table[i].frequency==CPUFREQ_ENTRY_INVALID) continue;
+		if (u[j] > CPU_UV_MV_MAX / 1000)
+		{
+			u[j] = CPU_UV_MV_MAX / 1000;
+		}
+		else if (u[j] < CPU_UV_MV_MIN / 1000)
+		{
+			u[j] = CPU_UV_MV_MIN / 1000;
+		}
+		exynos_info->volt_table[i] = u[j]*1000;
+		j++;
+	}
 	return count;
 }
-extern unsigned int smooth_target;
-ssize_t show_smooth_target(struct cpufreq_policy *policy, char *buf) {
-      return sprintf(buf, "%d\n", smooth_target);
-}
-ssize_t store_smooth_target(struct cpufreq_policy *policy,
-                                      const char *buf, size_t count) {
-	unsigned int ret = -EINVAL, level;
-	ret = sscanf(buf, "%d", &level);
-	if(ret!=1) return -EINVAL;
-	if(level<0 || level>7) return -EINVAL;
-	smooth_target = level;
+
+ssize_t store_available_freqs_exynos4210(struct cpufreq_policy *policy,
+		     const char *buf, size_t count)
+{
+	int u[18] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+	int f[18] = {1600,1500,1400,1300,1200,1100,1000,900,800,700,600,500,400,300,200,100,50,25};
+	int i, j, tokencount = 0, ret = 0;
+	
+	if(count < 1) return -EINVAL;
+
+	//parse input
+	for(j = 0, i = 0; i < count; i++)
+	{
+		char c = buf[i];
+		if(c >= '0' && c <= '9')
+		{
+			if(tokencount < j + 1) tokencount = j + 1;
+			u[j] *= 10;
+			u[j] += (c - '0');
+		}
+		else if(c == ' ' || c == '\t')
+		{
+			if(u[j] != 0)
+			{
+				j++;
+			}
+		}
+		else
+			break;
+	}
+
+	//we need at least 3 steps (1000 800 500)
+	if( tokencount < 3 ) return -EINVAL;
+	//we need 1000, 800 and 500MHz steps...
+	ret = 0;
+	for(i = 0; i < 18; i++)
+	{
+		if( u[i] == 1000 || u[i] == 800 || u[i] == 500 ) ret += u[i];
+	}
+	if( ret != 2300 ) return -EINVAL;
+
+	//we want freqs sorted
+	for(i = 1; i < 18; i++)
+	{
+		if( u[i] > u[i-1] ) return -EINVAL;
+	}
+
+	//validate
+	for(j=0, i = 0; i < 18; i++) 
+	{
+		if(j < 18 )
+			while( u[i] != f[j] )
+			{
+				f[j] = CPUFREQ_ENTRY_INVALID;
+				j++;
+				if( j == 18 ) break;
+			}
+		if( j == 18 ) break; //freq not found
+		f[j] = f[j] * 1000;
+		j++;
+	}
+	if(i < 18)
+		if( u[i] != 0 ) return -EINVAL; //means we have an invalid freq
+	if( j != 18 ) return -EINVAL; //should not happen but just in case
+
+	//apply
+	ret = exynos_cpufreq_lock(DVFS_LOCK_ID_PM,
+				   exynos_info->pm_lock_idx);
+	if (ret < 0) return -EINVAL;
+	ret = exynos_cpufreq_upper_limit(DVFS_LOCK_ID_PM,
+					exynos_info->pm_lock_idx);
+	if (ret < 0) return -EINVAL;
+	exynos_cpufreq_disable = true;
+
+	for(i = 0; i < 18; i++) 
+	{
+		exynos_info->freq_table[i].frequency = f[i];
+	}
+	cpufreq_frequency_table_cpuinfo(policy, exynos_info->freq_table);
+	policy->max = exynos_info->freq_table[exynos_info->max_current_idx].frequency;
+	policy->min = exynos_info->freq_table[exynos_info->min_current_idx].frequency;
+
+	exynos_cpufreq_lock_free(DVFS_LOCK_ID_PM);
+	exynos_cpufreq_upper_limit_free(DVFS_LOCK_ID_PM);
+	exynos_cpufreq_disable = false;
+
 	return count;
 }
-extern unsigned int smooth_offset;
-ssize_t show_smooth_offset(struct cpufreq_policy *policy, char *buf) {
-      return sprintf(buf, "%d\n", smooth_offset);
+
+ssize_t show_smooth_level(struct cpufreq_policy *policy, char *buf) {
+      return sprintf(buf, "%d\n", smooth_level);
 }
-ssize_t store_smooth_offset(struct cpufreq_policy *policy,
+ssize_t store_smooth_level(struct cpufreq_policy *policy,
                                       const char *buf, size_t count) {
 	unsigned int ret = -EINVAL, level;
 	ret = sscanf(buf, "%d", &level);
 	if(ret!=1) return -EINVAL;
-	if(level<0 || level>4) return -EINVAL;
-	smooth_offset = level;
+	if(level<0 || level>17) return -EINVAL;
+	smooth_level = level;
 	return count;
 }
