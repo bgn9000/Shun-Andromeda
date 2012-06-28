@@ -5,15 +5,50 @@
 #exec >>/data/user.log
 #exec 2>&1
 
+mkdir /data/.shun
+chmod 777 /data/.shun
+ccxmlsum=`md5sum /res/customconfig/customconfig.xml | awk '{print $1}'`
+if [ "a${ccxmlsum}" != "a`cat /data/.shun/.ccxmlsum`" ];
+then
+  rm -f /data/.shun/*.profile
+  echo ${ccxmlsum} > /data/.shun/.ccxmlsum
+  #force install old superuser on kernel update
+  #mount -o remount,rw /system
+  #rm -f /system/xbin/su
+  #mount -o remount,ro /system
+fi
+[ ! -f /data/.shun/default.profile ] && cp /res/customconfig/default.profile /data/.shun
+[ ! -f /data/.shun/battery.profile ] && cp /res/customconfig/battery.profile /data/.shun
+[ ! -f /data/.shun/performance.profile ] && cp /res/customconfig/performance.profile /data/.shun
+
 . /res/customconfig/customconfig-helper
 read_defaults
 read_config
 
-mkdir /data/.shun
-chmod 777 /data/.shun
-[ ! -f /data/.shun/default.profile ] && cp /res/customconfig/default.profile /data/.shun
-[ ! -f /data/.shun/battery.profile ] && cp /res/customconfig/battery.profile /data/.shun
-[ ! -f /data/.shun/performance.profile ] && cp /res/customconfig/performance.profile /data/.shun
+//cpu undervolting
+echo "${cpu_undervolting}" > /sys/devices/system/cpu/cpu0/cpufreq/vdd_levels
+
+//change cpu step count
+case "${cpustepcount}" in
+  5)
+    echo 1200 1000 800 500 200 > /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies
+    ;;
+  6)
+    echo 1400 1200 1000 800 500 200 > /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies
+    ;;
+  7)
+    echo 1500 1400 1200 1000 800 500 200 > /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies
+    ;;
+  8)
+    echo 1600 1400 1200 1000 800 500 200 100 > /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies
+    ;;
+  9)
+    echo 1600 1500 1400 1200 1000 800 500 200 100 > /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies
+    ;;
+  18)
+    echo 1600 1500 1400 1300 1200 1100 1000 900 800 700 600 500 400 300 200 100 50 25 > /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies
+    ;;
+esac;
 
 if [ "$logger" == "on" ];then
 insmod /lib/modules/logger.ko
@@ -37,6 +72,9 @@ fi
 
 # for ntfs automounting
 insmod /lib/modules/fuse.ko
+mkdir /mnt/ntfs
+mount -t tmpfs tmpfs /mnt/ntfs
+chmod 777 /mnt/ntfs
 
 #/sbin/busybox sh /sbin/ext/busybox.sh
 

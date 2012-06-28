@@ -11,22 +11,6 @@
              <spinnerItem name="Second core always-off" value="always-off"/> 
              <spinnerItem name="Second core always-on" value="always-on"/> 
        </spinner>
-       <seekBar description="Sets second core kick-out threshold for screen-on state" 
-		name="loadl" action="generic /sys/module/pm_hotplug/parameters/loadl" unit="%" min="0" reversed="false" step="5" max="100"/>
-       <seekBar description="Sets second core kick-in threshold for screen-on state" 
-		name="loadh" action="generic /sys/module/pm_hotplug/parameters/loadh" unit="%" min="0" reversed="false" step="5" max="100"/>
-       <seekBar description="Sets second core kick-out threshold for screen-off state" 
-		name="loadl_scroff" action="generic /sys/module/pm_hotplug/parameters/loadl_scroff" unit="%" min="0" reversed="false" step="5" max="100"/>
-       <seekBar description="Sets second core kick-in threshold for screen-off state" 
-		name="loadh_scroff" action="generic /sys/module/pm_hotplug/parameters/loadh_scroff" unit="%" min="0" reversed="false" step="5" max="100"/>
-       <seekBar description="Sets hot plug sampling intervals for screen-on state" 
-		name="rate" action="generic /sys/module/pm_hotplug/parameters/rate" unit=" jiffies" min="50" reversed="false" step="50" max="2000"/>
-       <seekBar description="Sets hot plug sampling intervals for screen-on state when the second core is on" 
-		name="rate_cpuon" action="generic /sys/module/pm_hotplug/parameters/rate_cpuon" unit=" jiffies" min="50" reversed="false" step="50" max="2000"/>
-       <seekBar description="Sets hot plug sampling intervals for screen-off state" 
-		name="rate_scroff" action="generic /sys/module/pm_hotplug/parameters/rate_scroff" unit=" jiffies" min="50" reversed="false" step="50" max="2000"/>
-       <seekBar description="Set frequency below which second core will not be turned on, regardless of thresholds." 
-		name="freq_cpu1on" action="generic /sys/module/pm_hotplug/parameters/freq_cpu1on" unit=" kHz" min="100000" reversed="false" step="100000" max="1200000"/>
     </settingsPane>
 
     <settingsPane description="" 
@@ -37,22 +21,18 @@
              <spinnerItem name="AFTR only" value="1"/> 
              <spinnerItem name="Idle only" value="0"/> 
       </spinner>
+      <spinner description="Sets the smooth scaling level which prevents ondemand based governors to jump directly to maximum frequency with load spikes. This setting will only change the behavior of ondemand and pegasusq governors." name="Smooth Scaling Level" action="generickmem smooth_level 0 int">
+             <spinnerItem name="1600MHz" value="0"/> 
+             <spinnerItem name="1200MHz" value="4"/> 
+             <spinnerItem name="1000MHz" value="6"/> 
+             <spinnerItem name="800MHz" value="8"/> 
+      </spinner>
       <seekBar description="Sets the sched_mc value which changes the cpu scheduler behaviour for multi-cpu systems. 0 is Samsung kernel's default value which turns sched_mc off. Setting it to 1 means that the first core will be tried to be loaded more and setting it to 2 will bias task wake-ups to semi-idle cpu package for power savings. (default: 0)"
             name="sched_mc" action="generic /sys/devices/system/cpu/sched_mc_power_savings" unit="" min="0" reversed="false" step="1" max="2"/>
     </settingsPane>
-    
-    <settingsPane description="" 
-		name="CPU Smooth Scaling Settings">
-      <seekBar description="smooth_target controls both smooth-scaling and cpu throttling. Default value is 2 which corresponds to 1200MHz. If the cpu gets hot the cpu is throttled to L3(1000MHz) and L4(800MHz) depending on the temperature. If you decrease this value, both smooth scaling and throttling targets will decrease."
-            name="smooth_target" action="generic /sys/devices/system/cpu/cpu0/cpufreq/smooth_target" unit="" min="0" reversed="false" step="1" max="4"/>
-      <seekBar description="if smooth_target+smooth_offset is higher than the target frequency, minimum of current_freq-smooth_step or smooth_target+smooth_offset-smooth_step. Set this to 0 to disable smooth scaling."
-            name="smooth_offset" action="generic /sys/devices/system/cpu/cpu0/cpufreq/smooth_offset" unit="" min="0" reversed="false" step="1" max="4"/>
-      <seekBar description="if smooth_target+smooth_offset is higher than the target frequency, minimum of current_freq-smooth_step or smooth_target+smooth_offset-smooth_step. Set this to 0 to disable smooth scaling."
-            name="smooth_step" action="generic /sys/devices/system/cpu/cpu0/cpufreq/smooth_step" unit="" min="0" reversed="false" step="1" max="4"/>
-    </settingsPane>
 
-    <!--settingsPane description=""
-		name="Undervolting">
+    <settingsPane description=""
+		name="CPU Undervolting">
       <spinner description="Sets the CPU undervolting value which will be apploed during boot time only. It will not have any effect until you restart your device. Remember: if you change this value and your device doesn't boot you will have to reset extweaks settings using CWM recovery. This value will be applied to all CPU steps before any script or app execution. If you use any script or voltage control app this setting may be overriden by those." name="CPU Undervolting" action="generic /tmp/cpu_undervolting">
              <spinnerItem name="No Undervolting" value="0"/> 
              <spinnerItem name=" -25 mV" value="-25"/> 
@@ -60,8 +40,29 @@
              <spinnerItem name=" -75 mV" value="-75"/> 
              <spinnerItem name="-100 mV" value="-100"/> 
       </spinner>
-    </settingsPane-->
+    </settingsPane>
 
+    <settingsPane description=""
+		name="CPU Scaling Settings">
+      <spinner description="This setting will change CPU step count (Restart required)." name="CPU Step Count" action="generic /tmp/cpustepcount">
+             <spinnerItem name="5 (200-500-800-1000-1200MHz)" value="5"/> 
+             <spinnerItem name="6 (5-steps + 1400MHz)" value="6"/> 
+             <spinnerItem name="7 (6-steps + 1500MHz)" value="7"/> 
+             <spinnerItem name="8 (6-steps + 100MHz + 1600MHz)" value="8"/> 
+             <spinnerItem name="9 (8-step + 1500MHz)" value="9"/> 
+             <spinnerItem name="18 (All available)" value="18"/> 
+      </spinner>
+       <spinner description="This will set the default CPU governor. Default CPU governor will only be set during early stages of booting (before init.d execution) and can be overriden by later scripts or apps." name="Default CPU Governor" action="generic /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor">
+             <spinnerItem name="pegasusq" value="pegasusq"/> 
+             <spinnerItem name="conservative" value="conservative"/> 
+             <spinnerItem name="lulzactive" value="lulzactive"/> 
+             <spinnerItem name="abyssplug" value="abyssplug"/> 
+       </spinner>
+       <seekBar description="Scaling maximum frequency (Samsung default: 1200)"
+                name="scaling_max_freq" action="generic /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq" unit=" Mhz" min="100000" reversed="false" step="100000" max="1600000"/>
+       <seekBar description="Scaling minimum frequency (Samsung default: 200)"
+                name="scaling_min_freq" action="generic /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq" unit=" Mhz" min="100000" reversed="false" step="100000" max="1600000"/>
+    </settingsPane>
   </settingsTab>
 
   <settingsTab name="GPU">
@@ -156,10 +157,10 @@
              <spinnerItem name="3 minutes" value="180000"/> 
              <spinnerItem name="5 minutes" value="300000"/> 
              <spinnerItem name="10 minutes" value="600000"/> 
-             <spinnerItem name="20 minutes" value="12000000"/> 
-             <spinnerItem name="30 minutes" value="18000000"/> 
-             <spinnerItem name="60 minutes" value="36000000"/> 
-             <spinnerItem name="120 minutes" value="72000000"/> 
+             <spinnerItem name="20 minutes" value="1200000"/> 
+             <spinnerItem name="30 minutes" value="1800000"/> 
+             <spinnerItem name="60 minutes" value="3600000"/> 
+             <spinnerItem name="120 minutes" value="7200000"/> 
        </spinner>
        <spinner description="This setting will set led behavior in BLN." name="BLN Effect" action="bln_effect">
              <spinnerItem name="Steady" value="0"/> 
@@ -186,19 +187,13 @@
     <settingsPane description="Misc Settings" name="Misc Settings">
       <button description="Back up the efs partition" name="BackupEFS" action="efs-backup" label="Backup EFS"/>
       <checkbox description="Enable or Disable Android Logger (needs restart)" name="Android Logger" action="generic /tmp/logger" label="Android Logger"/>
-      <spinner description="This will set the suspend frequency used in ondemand governor to have ondemandX behaviour. This will only be set during early stages of booting (before init.d execution) and can be overriden by later scripts or apps and only effective while ondemand governor is in use." name="Default Ondemand Suspend Freq." action="generic /sys/devices/system/cpu/cpufreq/ondemand/suspend_freq">
+      <!-- spinner description="This will set the suspend frequency used in ondemand governor to have ondemandX behaviour. This will only be set during early stages of booting (before init.d execution) and can be overriden by later scripts or apps and only effective while ondemand governor is in use." name="Default Ondemand Suspend Freq." action="generic /sys/devices/system/cpu/cpufreq/ondemand/suspend_freq">
              <spinnerItem name="1200MHz" value="1200000"/> 
              <spinnerItem name="1000MHz" value="1000000"/> 
              <spinnerItem name="800MHz" value="800000"/> 
              <spinnerItem name="500MHz" value="500000"/> 
              <spinnerItem name="200MHz" value="200000"/> 
-      </spinner>
-      <spinner description="This will set the default CPU governor. Default CPU governor will only be set during early stages of booting (before init.d execution) and can be overriden by later scripts or apps." name="Default CPU Governor" action="generic /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor">
-             <spinnerItem name="ondemand" value="ondemand"/>
-             <spinnerItem name="conservative" value="conservative"/>
-	     <spinnerItem name="abyssplug" value="abyssplug"/>
-             <spinnerItem name="lulzactive" value="lulzactive"/> 
-      </spinner>
+      </spinner -->
       <spinner description="This will set the default I/O scheduler. Default I/O scheduler will only be set during early stages of booting (before init.d execution) and can be overriden by later scripts or apps." name="Default I/O Scheduler" action="generic /sys/block/mmcblk0/queue/scheduler">
              <spinnerItem name="bfq" value="bfq"/>
 	     <spinnerItem name="sio" value="sio"/> 
