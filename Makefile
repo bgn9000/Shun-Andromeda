@@ -347,8 +347,11 @@ CHECK		= sparse
 
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
-SIYAH_FLAGS   = -marm -march=armv7-a -mfloat-abi=hard \
-			   -mcpu=cortex-a9 -mfpu=vfp3			
+XX_A9 	    = 	-marm -mtune=cortex-a9 -mfpu=neon -march=armv7-a -mfloat-abi=hard
+XX_GRAPHITE = 	-fgraphite-identity -floop-block -ftree-loop-linear \
+		-floop-strip-mine -ftree-loop-distribution
+XX_MODULO   = 	-fmodulo-sched -fmodulo-sched-allow-regmoves
+
 CFLAGS_MODULE   =
 AFLAGS_MODULE   =
 LDFLAGS_MODULE  =
@@ -370,7 +373,8 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
-		   -fno-delete-null-pointer-checks $(SIYAH_FLAGS)
+		   -fno-delete-null-pointer-checks \
+		   $(XX_A9) $(XX_GRAPHITE) $(XX_MODULO)
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
 KBUILD_AFLAGS   := -D__ASSEMBLY__
