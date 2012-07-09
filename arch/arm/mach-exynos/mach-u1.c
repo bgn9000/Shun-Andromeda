@@ -1938,8 +1938,8 @@ static struct lcd_platform_data ld9040_platform_data = {
 	.gpio_cfg_lateresume = lcd_gpio_cfg_lateresume,
 	/* it indicates whether lcd panel is enabled from u-boot. */
 	.lcd_enabled = 1,
-	.reset_delay = 20,	/* 20ms */
-	.power_on_delay = 50,	/* 50ms */
+	.reset_delay = 20,	/* 10ms */
+	.power_on_delay = 20,	/* 20ms */
 	.power_off_delay = 200,	/* 120ms */
 	.pdata = &u1_panel_data,
 };
@@ -3835,7 +3835,6 @@ struct gpio_keys_button u1_buttons[] = {
 		.wakeup = 1,
 		.isr_hook = sec_debug_check_crash_key,
 	},			/* power key */
-#if !defined(CONFIG_TARGET_LOCALE_NAATT_TEMP)
 	{
 		.code = KEY_HOME,
 		.gpio = GPIO_OK_KEY,
@@ -3843,7 +3842,6 @@ struct gpio_keys_button u1_buttons[] = {
 		.type = EV_KEY,
 		.wakeup = 1,
 	},			/* ok key */
-#endif
 };
 
 struct gpio_keys_platform_data u1_keypad_platform_data = {
@@ -4036,6 +4034,7 @@ static u8 t20_config[] = { PROCI_GRIPFACESUPPRESSION_T20,
 static u8 t22_config[] = { PROCG_NOISESUPPRESSION_T22,
 	143, 0, 0, 0, 0, 0, 0, 3, MXT224_NOISE_THRESHOLD_BATT, 0,
 	0, 29, 34, 39, 49, 58, 3
+//	0, 10, 12, 18, 20, 29, 3
 };
 
 static u8 t28_config[] = { SPT_CTECONFIG_T28,
@@ -4885,7 +4884,7 @@ static int max17042_low_batt_cb(void)
 #ifdef RECAL_SOC_FOR_MAXIM
 static bool max17042_need_soc_recal(void)
 {
-	pr_info("%s: HW(0x%x)\n", __func__, system_rev);
+	pr_debug("%s: HW(0x%x)\n", __func__, system_rev);
 
 	if (system_rev >= NO_NEED_RECAL_SOC_HW_REV)
 		return false;
