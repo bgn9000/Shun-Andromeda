@@ -1,9 +1,9 @@
 <settingsRoot>
   <settingsTab name="CPU">
-    <!-- settingsPane description="These settings control CFS (Complete Fair Scheduler) Task Scheduler Settings" name="CFS Settings">
+    <settingsPane description="These settings control CFS (Complete Fair Scheduler) Task Scheduler Settings" name="CFS Settings">
       <checkbox description="Disabling GENTLE_FAIR_SLEEPERS may give you better UI responsiveness." name="GENTLE_FAIR_SLEEPERS" action="schedfeat GENTLE_FAIR_SLEEPERS" label="GENTLE_FAIR_SLEEPERS"/>
       <checkbox description="Using ARCH_POWER enables the use of arm topology power functions instead of generic ones." name="ARCH_POWER" action="schedfeat ARCH_POWER" label="ARCH_POWER"/>
-    </settingsPane -->
+    </settingsPane>
     <settingsPane description="The following settings control CPU hotplug parameters. Depending on the following parameters, the second core is enabled or disabled." 
 		name="CPU Hotplug Settings">
        <spinner description="Sets the CPU Hotplug Mode. Hotplug mode will dynamically switch the second core on and off. Using second core always-off or always-on modes will make the other hotplug parameters useless." name="Hotplug Mode" action="secondcore">
@@ -11,6 +11,11 @@
              <spinnerItem name="Second core always-off" value="always-off"/> 
              <spinnerItem name="Second core always-on" value="always-on"/>
        </spinner>
+       <spinner description="Changes CFS granularity and latency settings. Using anything other than stock may decrease benchmark scores but will increase UI responsiveness" name="CFS Tweaks" action="cfs-tweaks">
+             <spinnerItem name="Samsung defaults" value="0"/> 
+             <spinnerItem name="Linux kernel defaults" value="1"/> 
+             <spinnerItem name="Thunderbolt script defaults" value="2"/> 
+      </spinner>
        <seekBar description="Sets second core kick-out threshold for screen-on state" 
 		name="loadl" action="generic /sys/module/pm_hotplug/parameters/loadl" unit="%" min="0" reversed="false" step="5" max="100"/>
        <seekBar description="Sets second core kick-in threshold for screen-on state" 
@@ -43,13 +48,17 @@
              <spinnerItem name="1000MHz" value="6"/> 
              <spinnerItem name="800MHz" value="8"/> 
       </spinner>
+      <spinner description="Sets the number of CPUs to be used in hotplugging (only for PegasusQ)" name="Max CPU Lock" action="generic /sys/devices/system/cpu/cpufreq/pegasusq/max_cpu_lock">
+             <spinnerItem name="Dual core mode" value="2"/> 
+             <spinnerItem name="Single core mode" value="1"/> 
+      </spinner>
       <seekBar description="Sets the sched_mc value which changes the cpu scheduler behaviour for multi-cpu systems. 0 is Samsung kernel's default value which turns sched_mc off. Setting it to 1 means that the first core will be tried to be loaded more and setting it to 2 will bias task wake-ups to semi-idle cpu package for power savings. (default: 0)"
             name="sched_mc" action="generic /sys/devices/system/cpu/sched_mc_power_savings" unit="" min="0" reversed="false" step="1" max="2"/>
     </settingsPane>
 
     <settingsPane description=""
 		name="CPU Undervolting">
-      <spinner description="Sets the CPU undervolting value which will be apploed during boot time only. It will not have any effect until you restart your device. Remember: if you change this value and your device doesn't boot you will have to reset extweaks settings using CWM recovery. This value will be applied to all CPU steps before any script or app execution. If you use any script or voltage control app this setting may be overriden by those." name="CPU Undervolting" action="generic /tmp/cpu_undervolting">
+      <spinner description="Sets the CPU undervolting value which will be applied during boot time only. It will not have any effect until you restart your device. Remember: if you change this value and your device doesn't boot you will have to reset extweaks settings using CWM recovery. This value will be applied to all CPU steps before any script or app execution. If you use any script or voltage control app this setting may be overriden by those." name="CPU Undervolting" action="generic /tmp/cpu_undervolting">
              <spinnerItem name="No Undervolting" value="0"/> 
              <spinnerItem name=" -25 mV" value="-25"/> 
              <spinnerItem name=" -50 mV" value="-50"/> 
@@ -162,6 +171,7 @@
 		name="Gamma Shift" action="generic /sys/devices/platform/samsung-pd.2/s3cfb.0/spi_gpio.3/spi_master/spi3/spi3.0/lcd/panel/user_gamma_adjust" unit="" min="-50" reversed="false" step="5" max="50"/>
        <seekBar description="Vibration intensity level (default 6)" 
 		name="Vibration Intensity" action="generic /sys/devices/platform/tspdrv/vibrator_level" unit="" min="0" reversed="false" step="1" max="6"/>
+       <checkbox description="Enable inverting the screen colors by quickly pressing Home button 4 times" name="mDNIe Negative Toggle" action="generic01 /sys/module/gpio_keys/parameters/mdnie_shortcut_enabled" label="mDNIe Negative Toggle"/>
     </settingsPane>
   </settingsTab>
   <settingsTab name="BLN">
@@ -222,6 +232,12 @@
              <spinnerItem name="AC:800mA, Misc:650mA, USB:450mA" value="2"/> 
              <spinnerItem name="AC:950mA, Misc:650mA, USB:450mA" value="3"/> 
       </spinner>
+      <spinner description="Change USB connection mode. Either leave it as default or force it to mass storage mode (you will see your sdcards as disks) or mtp" name="USB Mass Storage Mode" action="usb-mode">
+             <spinnerItem name="Default" value="default"/> 
+             <spinnerItem name="Force Mass Storage Mode" value="mass_storage-adb"/> 
+             <spinnerItem name="Force MTP Mode" value="mtp-adb"/> 
+      </spinner>
+      <checkbox description="If checked, BetterBatteryStatus will report exclusive (non-overlapping) deleted wakelock statistics." name="Exclusive Wakelock Stats" action="generic01 /sys/module/wakelock/parameters/default_stats" label="Exclusive Wakelock Stats"/>
       <button description="If you think that the fuel gauge chip is behaving weird use this button to reset it. Give it a few hours after you reset the gauge. It may still show you funny values for those period, then the battery percentage should be fine." name="Reset Fuel-Gauge Chip" action="reset-fuelgauge" label="Reset Fuel-Gauge Chip"/>
     </settingsPane>
     <settingsPane description="Removing/Reinstalling root to support some apps which requires you not to have a rooted phone." name="Remove/Reinstall Root">

@@ -12,10 +12,6 @@ if [ "a${ccxmlsum}" != "a`cat /data/.shun/.ccxmlsum`" ];
 then
   rm -f /data/.shun/*.profile
   echo ${ccxmlsum} > /data/.shun/.ccxmlsum
-  #force install old superuser on kernel update
-  #mount -o remount,rw /system
-  #rm -f /system/xbin/su
-  #mount -o remount,ro /system
 fi
 [ ! -f /data/.shun/default.profile ] && cp /res/customconfig/default.profile /data/.shun
 [ ! -f /data/.shun/battery.profile ] && cp /res/customconfig/battery.profile /data/.shun
@@ -25,10 +21,10 @@ fi
 read_defaults
 read_config
 
-//cpu undervolting
+#cpu undervolting
 echo "${cpu_undervolting}" > /sys/devices/system/cpu/cpu0/cpufreq/vdd_levels
 
-//change cpu step count
+#change cpu step count
 case "${cpustepcount}" in
   5)
     echo 1200 1000 800 500 200 > /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies
@@ -61,8 +57,6 @@ if [ "$logger" == "off" ];then
   echo 0 > /sys/module/mali/parameters/mali_debug_level
   echo 0 > /sys/module/kernel/parameters/initcall_debug
   echo 0 > /sys//module/lowmemorykiller/parameters/debug_level
-  echo 0 > /sys/module/wakelock/parameters/debug_mask
-  echo 0 > /sys/module/userwakelock/parameters/debug_mask
   echo 0 > /sys/module/earlysuspend/parameters/debug_mask
   echo 0 > /sys/module/alarm/parameters/debug_mask
   echo 0 > /sys/module/alarm_dev/parameters/debug_mask
@@ -105,5 +99,7 @@ sleep 30
 /sbin/busybox sh /sbin/ext/run-init-scripts.sh
 )&
 
+#usb mode
+/res/customconfig/actions/usb-mode ${usb_mode}
 #read sync < /data/sync_fifo
 #rm /data/sync_fifo
