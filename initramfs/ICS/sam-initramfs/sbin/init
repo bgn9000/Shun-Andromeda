@@ -18,28 +18,7 @@ if busybox grep -q 1 /sys/class/power_supply/battery/batt_lp_charging ; then
   exec /sbin/init.samsung
 fi
 
-SECONDROM=1
-NOBOOTLOGO=0
-mount -t ext4 -o ro /dev/block/mmcblk0p12 /preload
-mount -t vfat /dev/block/mmcblk0p11 /mnt/sdcard
-[ -f /preload/build.prop ] || SECONDROM=0
-[ -f /mnt/sdcard/.secondrom/data.img ] || SECONDROM=0
-[ -f /mnt/sdcard/.secondrom/cache.img ] || SECONDROM=0
-[ -f /mnt/sdcard/.nobootlogo ] && NOBOOTLOGO=1
-umount /preload
-umount /mnt/sdcard
-
-if [[ "$NOBOOTLOGO" == "1" && "$SECONDROM" == "0" ]];then
-  /sbin/choose_rom
-else
-  /sbin/choose_rom $SECONDROM
-fi
-
-if [ "$?" == "1" ]; then
-  SECONDROM=1
-else
-  SECONDROM=0
-fi
+/sbin/choose_rom 0
 
 /sbin/busybox mount -t ext4 /res/dev/system /system
 
@@ -94,11 +73,6 @@ if [ "$MIUI" == 1 ];
 then
 patch -p1 < /res/misc/miui.patch
 fi
-fi
-
-if [ "$SECONDROM" == "1" ];then
-  mv /init.smdk4210.rc.2 /init.smdk4210.rc
-  mv /init.rc.2 /init.rc
 fi
 
 busybox umount /system
