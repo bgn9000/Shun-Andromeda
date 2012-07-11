@@ -126,11 +126,11 @@
 
     <settingsPane description="GPU Voltage Levels: The defaults are 950,1050 and 1050." name="GPU Voltage Levels">
       <seekBar description="GPU Voltage for the first (lowest) step" 
-		name="GPU Voltage Level1" action="gpu-voltage 1" unit="mV" min="800" reversed="false" step="50" max="1200"/>
+		name="GPU Voltage Level1" action="gpu-voltage 1" unit="mV" min="700" reversed="false" step="50" max="1200"/>
       <seekBar description="GPU Voltage for the second (middle) step" 
-		name="GPU Voltage Level2" action="gpu-voltage 2" unit="mV" min="800" reversed="false" step="50" max="1200"/>
+		name="GPU Voltage Level2" action="gpu-voltage 2" unit="mV" min="700" reversed="false" step="50" max="1200"/>
       <seekBar description="GPU Voltage for the third (highest) step" 
-		name="GPU Voltage Level3" action="gpu-voltage 3" unit="mV" min="800" reversed="false" step="50" max="1200"/>
+		name="GPU Voltage Level3" action="gpu-voltage 3" unit="mV" min="700" reversed="false" step="50" max="1200"/>
     </settingsPane>
 
     <settingsPane description="GPU load thresholds to change between frequency steps. The third step is disabled as default by having the second to third threshold 100." name="GPU Thresholds">
