@@ -348,7 +348,7 @@ CHECK		= sparse
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
 XX_A9 	    = 	-marm -march=armv7-a \
-			   -mcpu=cortex-a9 -mfpu=vfp3
+		-mcpu=cortex-a9 -mfpu=neon -mfloat-abi=softfp
 XX_GRAPHITE = 	-fgraphite-identity -floop-block -ftree-loop-linear \
 		-floop-strip-mine -ftree-loop-distribution
 XX_MODULO   = 	-fmodulo-sched -fmodulo-sched-allow-regmoves
