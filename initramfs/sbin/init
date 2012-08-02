@@ -58,7 +58,6 @@ else
 if [ "$B2G" == 1 ];
 then
 patch -p1 < /res/misc/b2g.patch
-mv /sbin/init.b2g /sbin/init.samsung
 fi;
 
 if [ "$AOSP" == 1 ];

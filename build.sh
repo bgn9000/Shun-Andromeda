@@ -35,7 +35,7 @@ mkdir $INITRAMFS_TMP/lib/modules/
 
 cd initramfs/
 tar cvf $INITRAMFS_TMP/initramfs.tar *
-cd ../../..
+cd ..
 cd $INITRAMFS_TMP
 tar xvf initramfs.tar
 rm initramfs.tar
@@ -55,7 +55,5 @@ if [ "${1}" == "ATT" ];then
 	mv $KERNELDIR/zImage $KERNELDIR/zImage-att
 elif [ "${1}" == "NTT" ];then
 	mv $KERNELDIR/zImage $KERNELDIR/zImage-ntt
-else
-	mv $KERNELDIR/zImage $KERNELDIR/zImage
 fi
 
