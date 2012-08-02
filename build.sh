@@ -16,7 +16,7 @@ export CROSS_COMPILE=$PARENT_DIR/arm-2012/bin_472/arm-linux-gnueabihf-
 echo config...
 if [ ! -f $KERNELDIR/.config ];
 then
-  ./config.sh $3
+  ./config.sh $1
 fi
 
 . $KERNELDIR/.config
@@ -32,21 +32,8 @@ rm -rf $INITRAMFS_TMP.cpio
 mkdir $INITRAMFS_TMP
 mkdir $INITRAMFS_TMP/lib
 mkdir $INITRAMFS_TMP/lib/modules/
-if [ "${1}" == "SAM" ]; 
-then
-	if [ "${2}" == "GB" ];
-	then
-		export CIBLE="sam"
-		cd initramfs/GB/sam-initramfs
-	else
-		export CIBLE="samics"
-		cd initramfs/ICS/sam-initramfs
-	fi
-elif [ "${1}" == "AOSP" ];
-then
-	export CIBLE="aosp"
-	cd initramfs/GB/aosp-initramfs
-fi
+
+cd initramfs/
 tar cvf $INITRAMFS_TMP/initramfs.tar *
 cd ../../..
 cd $INITRAMFS_TMP
@@ -64,11 +51,11 @@ echo compiling kernel...
 nice -n 10 make -j3 zImage CONFIG_INITRAMFS_SOURCE="$INITRAMFS_TMP.cpio" || exit 1
 $KERNELDIR/mkshbootimg.py $KERNELDIR/zImage $KERNELDIR/arch/arm/boot/zImage $KERNELDIR/payload.tar
 
-if [ "${3}" == "ATT" ];then
-	mv $KERNELDIR/zImage $KERNELDIR/zImage-att-$CIBLE
+if [ "${1}" == "ATT" ];then
+	mv $KERNELDIR/zImage $KERNELDIR/zImage-att
 elif [ "${1}" == "NTT" ];then
-	mv $KERNELDIR/zImage $KERNELDIR/zImage-ntt-$CIBLE
+	mv $KERNELDIR/zImage $KERNELDIR/zImage-ntt
 else
-	mv $KERNELDIR/zImage $KERNELDIR/zImage-$CIBLE
+	mv $KERNELDIR/zImage $KERNELDIR/zImage
 fi
 
