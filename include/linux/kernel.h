@@ -749,15 +749,4 @@ extern int __build_bug_on_failed;
 # define REBUILD_DUE_TO_FTRACE_MCOUNT_RECORD
 #endif
 
-/* To identify board information in panic logs, set this */
-extern char *mach_panic_string;
-
 #endif
-
-#define FEATURE_BIT_ROM 0 //0:Samsung 1:AOSP(CM7|MIUI|Others)
-#define FEATURE_BIT_AOSP_TYPE 1 //1-CM7 0-OtherAOSP|MIUI
-
-#define SAMSUNGROM if( (rom_feature_set & (1<<FEATURE_BIT_ROM) ) == 0 )
-#define AOSPROM if( (rom_feature_set & (1<<FEATURE_BIT_ROM) )== (1<<FEATURE_BIT_ROM) )
-#define CYANOGENMOD if( (rom_feature_set & (1<<FEATURE_BIT_AOSP_TYPE) ) == (1<<FEATURE_BIT_AOSP_TYPE) )
-//more to come...

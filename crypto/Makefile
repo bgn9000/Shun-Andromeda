@@ -2,10 +2,6 @@
 # Cryptographic API
 #
 
-# SEC FIPS MODE
-FIPS=fips_
-obj-$(CONFIG_CRYPTO_FIPS) += fips_integrity.o
-
 obj-$(CONFIG_CRYPTO) += crypto.o
 crypto-y := api.o cipher.o compress.o
 

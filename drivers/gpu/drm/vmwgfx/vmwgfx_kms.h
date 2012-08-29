@@ -29,7 +29,6 @@
 #define VMWGFX_KMS_H_
 
 #include "drmP.h"
-#include "drm_crtc_helper.h"
 #include "vmwgfx_drv.h"
 
 

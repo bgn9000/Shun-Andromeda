@@ -26,8 +26,6 @@
 #include <linux/workqueue.h>
 #include <linux/gpio.h>
 
-extern struct class *sec_class;
-
 struct gpio_button_data {
 	struct gpio_keys_button *button;
 	struct input_dev *input;
@@ -35,18 +33,15 @@ struct gpio_button_data {
 	struct work_struct work;
 	int timer_debounce;	/* in msecs */
 	bool disabled;
-	bool key_state;
 };
 
 struct gpio_keys_drvdata {
 	struct input_dev *input;
-	struct device *sec_key;
 	struct mutex disable_lock;
 	unsigned int n_buttons;
 	int (*enable)(struct device *dev);
 	void (*disable)(struct device *dev);
 	struct gpio_button_data data[0];
-	/* WARNING: this area can be expanded. Do NOT add any member! */
 };
 
 /*
@@ -310,63 +305,6 @@ static DEVICE_ATTR(disabled_switches, S_IWUSR | S_IRUGO,
 		   gpio_keys_show_disabled_switches,
 		   gpio_keys_store_disabled_switches);
 
-static ssize_t key_pressed_show(struct device *dev,
-				struct device_attribute *attr, char *buf)
-{
-	struct gpio_keys_drvdata *ddata =
-	    (struct gpio_keys_drvdata *)dev_get_platdata(dev);
-	int i;
-	int keystate = 0;
-
-	for (i = 0; i < ddata->n_buttons; i++) {
-		struct gpio_button_data *bdata = &ddata->data[i];
-		keystate |= bdata->key_state;
-	}
-
-	if (keystate)
-		sprintf(buf, "PRESS");
-	else
-		sprintf(buf, "RELEASE");
-
-	return strlen(buf);
-}
-
-/* the volume keys can be the wakeup keys in special case */
-static ssize_t wakeup_enable(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t count)
-{
-	struct gpio_keys_drvdata *ddata =
-		(struct gpio_keys_drvdata *)dev_get_platdata(dev);
-	int n_events = get_n_events_by_type(EV_KEY);
-	unsigned long *bits;
-	ssize_t error;
-	int i;
-
-	bits = kcalloc(BITS_TO_LONGS(n_events),
-		sizeof(*bits), GFP_KERNEL);
-	if (!bits)
-		return -ENOMEM;
-
-	error = bitmap_parselist(buf, bits, n_events);
-	if (error)
-		goto out;
-
-	for (i = 0; i < ddata->n_buttons; i++) {
-		struct gpio_button_data *button = &ddata->data[i];
-		if (test_bit(button->button->code, bits))
-			button->button->wakeup = 1;
-		else
-			button->button->wakeup = 0;
-	}
-
-out:
-	kfree(bits);
-	return count;
-}
-
-static DEVICE_ATTR(sec_key_pressed, 0664, key_pressed_show, NULL);
-static DEVICE_ATTR(wakeup_keys, 0664, NULL, wakeup_enable);
-
 static struct attribute *gpio_keys_attrs[] = {
 	&dev_attr_keys.attr,
 	&dev_attr_switches.attr,
@@ -379,65 +317,19 @@ static struct attribute_group gpio_keys_attr_group = {
 	.attrs = gpio_keys_attrs,
 };
 
-static inline int64_t get_time_inms(void) {
-	int64_t tinms;
-	struct timespec cur_time = current_kernel_time();
-	tinms =  cur_time.tv_sec * MSEC_PER_SEC;
-	tinms += cur_time.tv_nsec / NSEC_PER_MSEC;
-	return tinms;
-}
-
-#define HOME_KEY_VAL	102
-extern void mdnie_toggle_negative(void);
-int homekey_trg_cnt = 4;
-int homekey_trg_ms = 300;
-
-static int mdnie_shortcut_enabled = 1;
-module_param_named(mdnie_shortcut_enabled, mdnie_shortcut_enabled, int, S_IRUGO | S_IWUSR | S_IWGRP);
-
 static void gpio_keys_report_event(struct gpio_button_data *bdata)
 {
-	static int64_t homekey_lasttime = 0;
-	static int homekey_count = 0;
-	
 	struct gpio_keys_button *button = bdata->button;
 	struct input_dev *input = bdata->input;
 	unsigned int type = button->type ?: EV_KEY;
-	struct irq_desc *desc = irq_to_desc(gpio_to_irq(button->gpio));
 	int state = (gpio_get_value_cansleep(button->gpio) ? 1 : 0) ^ button->active_low;
-
-	//mdnie negative effect toggle by gm
-	if((button->code == HOME_KEY_VAL) && mdnie_shortcut_enabled)
-	{
-		if(state) {
-			if (  get_time_inms() - homekey_lasttime < homekey_trg_ms) {
-				homekey_count++;
-				printk(KERN_INFO "repeated home_key action %d.\n", homekey_count);
-			}
-			else
-			{
-				homekey_count = 0;
-			}
-		}
-		else {
-			if(homekey_count>=homekey_trg_cnt - 1)
-			{
-				mdnie_toggle_negative();
-				homekey_count = 0;
-			}
-			homekey_lasttime = get_time_inms();
-		}
-	}
 
 	if (type == EV_ABS) {
 		if (state)
 			input_event(input, type, button->code, button->value);
 	} else {
-		bdata->key_state = !!state;
-
-		input_event(input, type, button->code, irqd_is_wakeup_set(&desc->irq_data) ? 1 : !!state);
+		input_event(input, type, button->code, !!state);
 	}
-
 	input_sync(input);
 }
 
@@ -469,11 +361,6 @@ static irqreturn_t gpio_keys_isr(int irq, void *dev_id)
 	else
 		schedule_work(&bdata->work);
 
-	if (button->isr_hook) {
-		int state = (gpio_get_value(button->gpio) ? 1 : 0) ^ button->active_low;
-		button->isr_hook(button->code, state);
-	}
-
 	return IRQ_HANDLED;
 }
 
@@ -504,9 +391,6 @@ static int __devinit gpio_keys_setup_key(struct platform_device *pdev,
 		goto fail3;
 	}
 
-	if( button->debounce_interval < KEY_NOISE_DEBOUNCE )  button->debounce_interval = KEY_NOISE_DEBOUNCE;
-
-
 	if (button->debounce_interval) {
 		error = gpio_set_debounce(button->gpio,
 					  button->debounce_interval * 1000);
@@ -530,9 +414,6 @@ static int __devinit gpio_keys_setup_key(struct platform_device *pdev,
 	 */
 	if (!button->can_disable)
 		irqflags |= IRQF_SHARED;
-
-	if (button->wakeup)
-		irqflags |= IRQF_NO_SUSPEND;
 
 	error = request_any_context_irq(irq, gpio_keys_isr, irqflags, desc, bdata);
 	if (error < 0) {
@@ -631,23 +512,6 @@ static int __devinit gpio_keys_probe(struct platform_device *pdev)
 			error);
 		goto fail2;
 	}
-
-	ddata->sec_key =
-	    device_create(sec_class, NULL, 0, NULL, "sec_key");
-	if (IS_ERR(ddata->sec_key))
-		dev_err(dev, "Failed to create sec_key device\n");
-
-	error = device_create_file(ddata->sec_key, &dev_attr_sec_key_pressed);
-	if (error < 0)
-		dev_err(dev, "Failed to create device file(%s), error: %d\n",
-			dev_attr_sec_key_pressed.attr.name, error);
-
-	error = device_create_file(ddata->sec_key, &dev_attr_wakeup_keys);
-	if (error < 0)
-		dev_err(dev, "Failed to create device file(%s), error: %d\n",
-			dev_attr_wakeup_keys.attr.name, error);
-
-	ddata->sec_key->platform_data = (void *)ddata;
 
 	error = input_register_device(input);
 	if (error) {

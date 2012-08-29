@@ -28,9 +28,6 @@
 #include "power.h"
 
 const char *const pm_states[PM_SUSPEND_MAX] = {
-#ifdef CONFIG_EARLYSUSPEND
-	[PM_SUSPEND_ON]		= "on",
-#endif
 	[PM_SUSPEND_STANDBY]	= "standby",
 	[PM_SUSPEND_MEM]	= "mem",
 };
@@ -129,13 +126,12 @@ void __attribute__ ((weak)) arch_suspend_enable_irqs(void)
 }
 
 /**
- * suspend_enter - enter the desired system sleep state.
- * @state: State to enter
- * @wakeup: Returns information that suspend should not be entered again.
+ *	suspend_enter - enter the desired system sleep state.
+ *	@state:		state to enter
  *
- * This function should be called after devices have been suspended.
+ *	This function should be called after devices have been suspended.
  */
-static int suspend_enter(suspend_state_t state, bool *wakeup)
+static int suspend_enter(suspend_state_t state)
 {
 	int error;
 
@@ -169,8 +165,7 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 
 	error = syscore_suspend();
 	if (!error) {
-		*wakeup = pm_wakeup_pending();
-		if (!(suspend_test(TEST_CORE) || *wakeup)) {
+		if (!(suspend_test(TEST_CORE) || pm_wakeup_pending())) {
 			error = suspend_ops->enter(state);
 			events_check_enabled = false;
 		}
@@ -204,7 +199,6 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 int suspend_devices_and_enter(suspend_state_t state)
 {
 	int error;
-	bool wakeup = false;
 
 	if (!suspend_ops)
 		return -ENOSYS;
@@ -226,10 +220,7 @@ int suspend_devices_and_enter(suspend_state_t state)
 	if (suspend_test(TEST_DEVICES))
 		goto Recover_platform;
 
-	do {
-		error = suspend_enter(state, &wakeup);
-	} while (!error && !wakeup
-		&& suspend_ops->suspend_again && suspend_ops->suspend_again());
+	error = suspend_enter(state);
 
  Resume_devices:
 	suspend_test_start();

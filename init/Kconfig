@@ -909,22 +909,11 @@ config CC_OPTIMIZE_FOR_SIZE
 
 	  If unsure, say Y.
 
-config CC_CHECK_WARNING_STRICTLY
-	bool "Check warnings more strictly"
-	help
-	  Enabling this option will pass "-Werror" to gcc
-
 config SYSCTL
 	bool
 
 config ANON_INODES
 	bool
-
-config PANIC_TIMEOUT
-	int "Default panic timeout"
-	default 0
-	help
-	  Set default panic timeout.
 
 menuconfig EXPERT
 	bool "Configure standard kernel features (expert users)"
@@ -968,7 +957,7 @@ config KALLSYMS
 
 config KALLSYMS_ALL
 	bool "Include all symbols in kallsyms"
-	depends on KALLSYMS
+	depends on DEBUG_KERNEL && KALLSYMS
 	help
 	   Normally kallsyms only contains the symbols of functions for nicer
 	   OOPS messages and backtraces (i.e., symbols from the text and inittext
@@ -1091,15 +1080,6 @@ config SHMEM
 	  to userspace as tmpfs if TMPFS is enabled. Disabling this
 	  option replaces shmem and tmpfs with the much simpler ramfs code,
 	  which may be appropriate on small systems without swap.
-
-config ASHMEM
-	bool "Enable the Anonymous Shared Memory Subsystem"
-	default n
-	depends on SHMEM || TINY_SHMEM
-	help
-	  The ashmem subsystem is a new shared memory allocator, similar to
-	  POSIX SHM but with different behavior and sporting a simpler
-	  file-based API.
 
 config AIO
 	bool "Enable AIO support" if EXPERT
@@ -1248,11 +1228,6 @@ config SLUB
 	   and has enhanced diagnostics. SLUB is the default choice for
 	   a slab allocator.
 
-config SLQB
-	bool "SLQB (Queued allocator)"
-	help
-	  SLQB is a proposed new slab allocator.
-
 config SLOB
 	depends on EXPERT
 	bool "SLOB (Simple Allocator)"
@@ -1309,7 +1284,7 @@ config HAVE_GENERIC_DMA_COHERENT
 config SLABINFO
 	bool
 	depends on PROC_FS
-	depends on SLAB || SLUB_DEBUG || SLQB
+	depends on SLAB || SLUB_DEBUG
 	default y
 
 config RT_MUTEXES

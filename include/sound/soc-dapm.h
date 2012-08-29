@@ -510,7 +510,7 @@ struct snd_soc_dapm_context {
 	struct snd_soc_card *card; /* parent card */
 
 	/* used during DAPM updates */
-	enum snd_soc_bias_level target_bias_level;
+	int dev_power;
 	struct list_head list;
 
 #ifdef CONFIG_DEBUG_FS
