@@ -700,3 +700,43 @@ int exynos4x12_init(struct device *dev, struct busfreq_data *data)
 
 	return 0;
 }
+
+/* sysfs interface for internal voltage control */
+ssize_t show_bus_mV_table(struct cpufreq_policy *policy, char *buf) {
+	  
+	int i, len = 0;
+	if (buf) {
+		for (i = 0 ; i < LV_END ; i++) {
+			len += sprintf(buf + len, "%dmhz: %d mV\n", exynos4_busfreq_table[i].mem_clk/1000,exynos4_busfreq_table[i].volt/1000);
+		}
+	}
+	return len;
+}
+
+ssize_t store_bus_mV_table(struct cpufreq_policy *policy,
+                                      const char *buf, size_t count) {
+
+	unsigned int ret = -EINVAL;
+    int i = 0;
+	int u[7];
+	
+	ret = sscanf(buf, "%d %d %d %d %d %d %d", &u[0], &u[1], &u[2], &u[3], &u[4], &u[5], &u[6]);
+	
+	if(ret != 7)
+		return -EINVAL;
+	
+	for( i = 0; i < LV_END; i++ ) {
+		if (u[i] > CPU_BUS_MAX_UV / 1000) {
+			u[i] = CPU_BUS_MAX_UV / 1000;
+		}
+		else if (u[i] < CPU_BUS_MIN_UV / 1000) {
+			u[i] = CPU_BUS_MIN_UV / 1000;
+		}
+	}
+	
+	for( i = 0; i < LV_END; i++ ) {
+		exynos4_busfreq_table[i].volt = u[i]*1000;
+	}
+	return count;
+}
+

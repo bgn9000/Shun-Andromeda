@@ -27,6 +27,9 @@
 #define CPU_UV_MV_MAX 1500000
 #define CPU_UV_MV_MIN 750000
 
+#define CPU_BUS_MAX_UV 1300000
+#define CPU_BUS_MIN_UV 750000
+
 
 /*********************************************************************
  *                     CPUFREQ NOTIFIER INTERFACE                    *

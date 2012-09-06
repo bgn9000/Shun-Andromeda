@@ -625,6 +625,10 @@ extern ssize_t show_UV_mV_table(struct cpufreq_policy *policy, char *buf);
 extern ssize_t store_UV_mV_table(struct cpufreq_policy *policy,
                                       const char *buf, size_t count);
 
+extern ssize_t show_bus_mV_table(struct cpufreq_policy *policy, char *buf);
+extern ssize_t store_bus_mV_table(struct cpufreq_policy *policy,
+                                      const char *buf, size_t count);
+
 /**
  * show_scaling_driver - show the current cpufreq HW/BIOS limitation
  */
@@ -657,6 +661,7 @@ cpufreq_freq_attr_rw(scaling_setspeed);
 cpufreq_freq_attr_rw(vdd_levels);
 /* UV table */
 cpufreq_freq_attr_rw(UV_mV_table);
+cpufreq_freq_attr_rw(bus_mV_table);
 cpufreq_freq_attr_rw(smooth_level);
 
 static struct attribute *default_attrs[] = {
@@ -673,6 +678,7 @@ static struct attribute *default_attrs[] = {
 	&scaling_setspeed.attr,
 	&vdd_levels.attr,
 	&UV_mV_table.attr,
+	&bus_mV_table.attr,
 	&smooth_level.attr,
 	NULL
 };
