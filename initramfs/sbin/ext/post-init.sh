@@ -64,16 +64,11 @@ if [ "$logger" == "off" ];then
   echo 0 > /sys/module/xt_qtaguid/parameters/debug_mask
 fi
 
-#apply last soundgasm level on boot
-/res/uci.sh soundgasm_hp $soundgasm_hp
-
 # for ntfs automounting
 insmod /lib/modules/fuse.ko
 mkdir /mnt/ntfs
 mount -t tmpfs tmpfs /mnt/ntfs
 chmod 777 /mnt/ntfs
-
-#/sbin/busybox sh /sbin/ext/busybox.sh
 
 /sbin/busybox sh /sbin/ext/properties.sh
 
@@ -84,6 +79,9 @@ chmod 777 /mnt/ntfs
 
 ##### Early-init phase tweaks #####
 /sbin/busybox sh /sbin/ext/tweaks.sh
+
+#apply last soundgasm level on boot
+/res/uci.sh soundgasm_hp $soundgasm_hp
 
 /sbin/busybox mount -t rootfs -o remount,ro rootfs
 
@@ -104,5 +102,3 @@ sleep 30
 
 #usb mode
 /res/customconfig/actions/usb-mode ${usb_mode}
-#read sync < /data/sync_fifo
-#rm /data/sync_fifo

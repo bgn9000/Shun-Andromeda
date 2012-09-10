@@ -7,18 +7,24 @@ tar xvf /res/misc/dev.tar
 
 if grep -q bootmode=2 /proc/cmdline ; then
   echo 0 > /proc/sys/kernel/rom_feature_set
-  mv /recovery.rc /init.rc
+  cp -a /recovery.rc /init.rc
   exec /sbin/init2
 fi
 if busybox grep -q 1 /sys/class/power_supply/battery/batt_lp_charging ; then
   # low power mode
   echo 0 > /proc/sys/kernel/rom_feature_set
-  cp lpm.rc init.rc
+  cp -a /lpm.rc /init.rc
   rm init.smdk4210.rc
   exec /sbin/init2
 fi
 
-/sbin/choose_rom 0
+mount -t vfat /dev/block/mmcblk0p11 /mnt/sdcard
+if [ -f /mnt/sdcard/.nobootlogo ]; then
+	/sbin/choose_rom
+else
+	/sbin/choose_rom 0
+fi
+umount /mnt/sdcard
 
 /sbin/busybox mount -t ext4 /res/dev/system /system
 
@@ -57,13 +63,14 @@ mv -f /res/misc/init.cm10/* /
 else
 if [ "$B2G" == 1 ];
 then
-patch -p1 < /res/misc/b2g.patch
+cp -a /res/misc/init.b2g/* /
+mv /sbin/init.b2g /sbin/init.samsung
 fi;
 
 if [ "$AOSP" == 1 ];
 then
 echo 1 > /proc/sys/kernel/rom_feature_set
-patch -p1 < /res/misc/cm9.patch
+cp -a /res/misc/init.cm9/* /
 rm -rf /vendor
 else
 echo 0 > /proc/sys/kernel/rom_feature_set
@@ -71,9 +78,9 @@ fi;
 
 if [ "$MIUI" == 1 ];
 then
-patch -p1 < /res/misc/miui.patch
+cp -a /res/misc/init.miui/* /
 fi
 fi
 
-busybox umount /system
+umount /system
 exec /sbin/init2

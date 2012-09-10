@@ -15,7 +15,7 @@ else
   eval $evalcmd
   evalcmd='eval "echo \$$configname"'
   eval $evalcmd
-  kmemhelper -n $2 -o $3 -t $4 $5 > /dev/null 2>&1
+  kmemhelper -n $2 -o $3 -t $4 -- $5 > /dev/null 2>&1
 fi
 
 

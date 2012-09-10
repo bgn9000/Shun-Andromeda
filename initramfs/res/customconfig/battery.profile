@@ -14,6 +14,7 @@ GPUSTAYCOUNT3=1
 min_bl=40
 min_gamma=0
 max_gamma=24
+rate=200
 enable_mask=3
 sched_mc_power_savings=0
 chargecurrent=2
