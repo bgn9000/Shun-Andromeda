@@ -237,7 +237,8 @@
       <spinner description="Charge current setting" name="Charge Current" action="chargecurrent">
              <spinnerItem name="AC:650mA, Misc,USB:450mA (Stock)" value="1"/> 
              <spinnerItem name="AC:800mA, Misc:650mA, USB:450mA" value="2"/> 
-             <spinnerItem name="AC:950mA, Misc:650mA, USB:450mA" value="3"/> 
+             <spinnerItem name="AC:950mA, Misc:650mA, USB:650mA" value="3"/> 
+             <spinnerItem name="AC:950mA, Misc:950mA, USB:950mA" value="4"/> 
       </spinner>
       <spinner description="Change USB connection mode. Either leave it as default or force it to mass storage mode (you will see your sdcards as disks) or mtp" name="USB Mass Storage Mode" action="usb-mode">
              <spinnerItem name="Default" value="default"/> 
