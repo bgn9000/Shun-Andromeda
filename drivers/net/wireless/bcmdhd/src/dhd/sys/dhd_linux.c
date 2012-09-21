@@ -244,10 +244,6 @@ static uint32 maxdelay = 0, tspktcnt = 0, maxdelaypktno = 0;
 
 #endif  /* WLMEDIA_HTSF */
 
-#if defined(CONFIG_PM_SLEEP) && defined(CUSTOMER_HW_SLP)
-/*SLP_wakelock_alternative_code*/
-extern struct device *pm_dev;
-#endif /* CONFIG_PM_SLEEP && CUSTOMER_HW_SLP */
 #if defined(PKT_FILTER_SUPPORT)
 #if defined(CUSTOMER_HW_SAMSUNG)
 #define HEX_PREF_STR	"0x"
@@ -341,7 +337,6 @@ char firmware_path[MOD_PARAM_PATHLEN];
 char nvram_path[MOD_PARAM_PATHLEN];
 
 int op_mode = 0;
-int disable_proptx = 0;
 module_param(op_mode, int, 0644);
 extern int wl_control_wl_start(struct net_device *dev);
 extern int net_os_send_hang_message(struct net_device *dev);
@@ -359,7 +354,6 @@ module_param(dhd_sysioc, uint, 0);
 
 /* Error bits */
 module_param(dhd_msg_level, int, 0);
-module_param(disable_proptx, int, 0);
 
 /* load firmware and/or nvram values from the filesystem */
 module_param_string(firmware_path, firmware_path, MOD_PARAM_PATHLEN, 0660);
@@ -556,7 +550,8 @@ static int dhd_wl_host_event(dhd_info_t *dhd, int *ifidx, void *pktdata,
 static int dhd_sleep_pm_callback(struct notifier_block *nfb, unsigned long action, void *ignored)
 {
 	int ret = NOTIFY_DONE;
-#if (LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 39)) || defined(BCMHOST)
+#if (LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 39)) || \
+	defined(CUSTOMER_HW_SAMSUNG)
 	switch (action) {
 	case PM_HIBERNATION_PREPARE:
 	case PM_SUSPEND_PREPARE:
@@ -611,27 +606,20 @@ static void dhd_set_packet_filter(int value, dhd_pub_t *dhd)
 #if defined(CONFIG_HAS_EARLYSUSPEND)
 static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 {
-	char iovbuf[32];
 #ifndef CUSTOMER_HW_SAMSUNG
 	int power_mode = PM_MAX;
 	/* wl_pkt_filter_enable_t	enable_parm; */
+	char iovbuf[32];
 	int bcn_li_dtim = 3;
 	uint roamvar = 1;
 #endif
-#ifdef BCM4334_CHIP
-	int bcn_li_bcn;
-#endif
-#ifdef PASS_ALL_MCAST_PKTS
-	uint32 allmulti;
-#endif /* PASS_ALL_MCAST_PKTS */
 
 	DHD_ERROR(("%s: enter, value = %d in_suspend=%d\n",
 		__FUNCTION__, value, dhd->in_suspend));
 
 	if (dhd && dhd->up) {
 		if (value && dhd->in_suspend) {
-			if (wl_cfgp2p_p2p_listen_suspend())
-				DHD_ERROR(("failed to set WLC_E_P2P_PROBREQ_MSG\n"));
+
 #ifdef PKT_FILTER_SUPPORT
 			dhd->early_suspended = 1;
 #endif
@@ -645,17 +633,7 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 #endif
 
 			/* Enable packet filter, only allow unicast packet to send up */
-			if (dhd_pkt_filter_enable && !dhd->dhcp_in_progress) {
-				int i;
-				for (i = 0; i < dhd->pktfilter_count; i++)
-					dhd_pktfilter_offload_enable(dhd, dhd->pktfilter[i],
-						1, dhd_master_mode);
-			}
-#ifdef PASS_ALL_MCAST_PKTS
-			allmulti = 0;
-			bcm_mkiovar("allmulti", (char *)&allmulti, 4, iovbuf, sizeof(iovbuf));
-			dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
-#endif /* PASS_ALL_MCAST_PKTS */
+			dhd_set_packet_filter(1, dhd);
 
 #ifndef CUSTOMER_HW_SAMSUNG
 			/* If DTIM skip is set up as default, force it to wake
@@ -670,12 +648,6 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 			/* Disable firmware roaming during suspend */
 			bcm_mkiovar("roam_off", (char *)&roamvar, 4,
 				iovbuf, sizeof(iovbuf));
-			dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
-#endif
-#ifdef BCM4334_CHIP
-			bcn_li_bcn = 0;
-			bcm_mkiovar("bcn_li_bcn", (char *)&bcn_li_bcn,
-				4, iovbuf, sizeof(iovbuf));
 			dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
 #endif
 		} else {
@@ -694,17 +666,7 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 #endif
 
 			/* disable pkt filter */
-			if (dhd_pkt_filter_enable && !dhd->dhcp_in_progress) {
-				int i;
-				for (i = 0; i < dhd->pktfilter_count; i++)
-					dhd_pktfilter_offload_enable(dhd, dhd->pktfilter[i],
-						0, dhd_master_mode);
-			}
-#ifdef PASS_ALL_MCAST_PKTS
-			allmulti = 1;
-			bcm_mkiovar("allmulti", (char *)&allmulti, 4, iovbuf, sizeof(iovbuf));
-			dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
-#endif /* PASS_ALL_MCAST_PKTS */
+			dhd_set_packet_filter(0, dhd);
 
 #ifndef CUSTOMER_HW_SAMSUNG
 			/* restore pre-suspend setting for dtim_skip */
@@ -716,12 +678,6 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 			roamvar = dhd_roam_disable;
 			bcm_mkiovar("roam_off", (char *)&roamvar, 4, iovbuf,
 				sizeof(iovbuf));
-			dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
-#endif
-#ifdef BCM4334_CHIP
-			bcn_li_bcn = 1;
-			bcm_mkiovar("bcn_li_bcn", (char *)&bcn_li_bcn,
-				4, iovbuf, sizeof(iovbuf));
 			dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
 #endif
 		}
@@ -746,7 +702,7 @@ static void dhd_early_suspend(struct early_suspend *h)
 {
 	struct dhd_info *dhd = container_of(h, struct dhd_info, early_suspend);
 
-	DHD_ERROR(("%s: enter\n", __FUNCTION__));
+	DHD_TRACE(("%s: enter\n", __FUNCTION__));
 
 	if (dhd)
 		dhd_suspend_resume_helper(dhd, 1);
@@ -756,7 +712,7 @@ static void dhd_late_resume(struct early_suspend *h)
 {
 	struct dhd_info *dhd = container_of(h, struct dhd_info, early_suspend);
 
-	DHD_ERROR(("%s: enter\n", __FUNCTION__));
+	DHD_TRACE(("%s: enter\n", __FUNCTION__));
 
 	if (dhd)
 		dhd_suspend_resume_helper(dhd, 0);
@@ -968,10 +924,7 @@ _dhd_set_multicast_list(dhd_info_t *dhd, int ifidx)
 #endif /* MCAST_LIST_ACCUMULATION */
 
 #ifdef PASS_ALL_MCAST_PKTS
-#ifdef PKT_FILTER_SUPPORT
-	if (!dhd->pub.early_suspended)
 	allmulti = TRUE;
-#endif
 #endif /* PASS_ALL_MCAST_PKTS */
 
 	/* Send down the multicast list first. */
@@ -1237,13 +1190,13 @@ dhd_op_if(dhd_if_t *ifp)
 		/* dhd_op_if is called again from some other context */
 		ifp->state = DHD_IF_DELETING;
 		if (ifp->net != NULL) {
-			DHD_ERROR(("\n%s: (WAR TRACE) got 'DHD_IF_DEL' state\n", __FUNCTION__));
-			netif_stop_queue(ifp->net);
+			DHD_TRACE(("\n%s: got 'DHD_IF_DEL' state\n", __FUNCTION__));
 #ifdef WL_CFG80211
 			if (dhd->dhd_state & DHD_ATTACH_STATE_CFG80211) {
 				wl_cfg80211_notify_ifdel(ifp->net);
 			}
 #endif
+			netif_stop_queue(ifp->net);
 			unregister_netdev(ifp->net);
 			ret = DHD_DEL_IF;	/* Make sure the free_netdev() is called */
 		}
@@ -1347,10 +1300,7 @@ _dhd_sysioc_thread(void *data)
 				}
 				if (dhd->set_macaddress == i+1) {
 					dhd->set_macaddress = 0;
-					if (0 == _dhd_set_mac_address(dhd, i, &dhd->macvalue))
-						DHD_INFO(("dhd_sysioc_thread: MACID is overwritten\n"));
-					else
-						DHD_ERROR(("dhd_sysioc_thread: _dhd_set_mac_address() failed\n"));
+					_dhd_set_mac_address(dhd, i, &dhd->macvalue);
 				}
 			}
 		}
@@ -1530,8 +1480,8 @@ dhd_start_xmit(struct sk_buff *skb, struct net_device *net)
 	 *   kernel panic issue when first bootup time,
 	 *   rmmod without interface down make unnecessary hang event.
 	 */
-	if (dhd->pub.busstate == DHD_BUS_DOWN || dhd->pub.hang_was_sent) {
-		DHD_ERROR(("%s: xmit rejected pub.up=%d busstate=%d\n",
+	if (dhd->pub.busstate == DHD_BUS_DOWN) {
+		DHD_ERROR(("%s: xmit rejected pub.up=%d busstate=%d \n",
 			__FUNCTION__, dhd->pub.up, dhd->pub.busstate));
 		netif_stop_queue(net);
 		/* Send Event when bus down detected during data session */
@@ -1555,7 +1505,7 @@ dhd_start_xmit(struct sk_buff *skb, struct net_device *net)
 		DHD_OS_WAKE_UNLOCK(&dhd->pub);
 		return -ENODEV;
 	}
-#endif /* CUSTOMER_HW_SAMSUNG */
+#endif
 
 	ifidx = dhd_net2idx(dhd, net);
 	if (ifidx == DHD_BAD_IF) {
@@ -2363,19 +2313,10 @@ dhd_ethtool(dhd_info_t *dhd, void *uaddr)
 
 static bool dhd_check_hang(struct net_device *net, dhd_pub_t *dhdp, int error)
 {
-	dhd_info_t * dhd;
-
 	if (!dhdp)
 		return FALSE;
-
-	dhd = (dhd_info_t *)dhdp->info;
-	if (dhd->thr_sysioc_ctl.thr_pid < 0) {
-		DHD_ERROR(("%s : skipped due to negative pid - unloading?\n", __FUNCTION__));
-		return FALSE;
-	}
-
-	if ((error == -ETIMEDOUT) || (error == -EREMOTEIO)
-		|| ((dhdp->busstate == DHD_BUS_DOWN)&&(!dhdp->dongle_reset))) {
+	if ((error == -ETIMEDOUT) || ((dhdp->busstate == DHD_BUS_DOWN) &&
+		(!dhdp->dongle_reset))) {
 		DHD_ERROR(("%s: Event HANG send up due to  re=%d te=%d e=%d s=%d\n", __FUNCTION__,
 			dhdp->rxcnt_timeout, dhdp->txcnt_timeout, error, dhdp->busstate));
 		net_os_send_hang_message(net);
@@ -2621,7 +2562,7 @@ dhd_cleanup_virt_ifaces(dhd_info_t *dhd)
 
 	for (i = 1; i < DHD_MAX_IFS; i++) {
 		if (dhd->iflist[i]) {
-			DHD_ERROR(("(WAR TRACE)Deleting IF: %d\n", i));
+			DHD_TRACE(("Deleting IF: %d \n", i));
 			if ((dhd->iflist[i]->state != DHD_IF_DEL) &&
 				(dhd->iflist[i]->state != DHD_IF_DELETING)) {
 				dhd->iflist[i]->state = DHD_IF_DEL;
@@ -2642,20 +2583,13 @@ dhd_cleanup_virt_ifaces(dhd_info_t *dhd)
 }
 #endif /* WL_CFG80211 */
 
-#if defined(WL_CFG80211) && defined(CUSTOMER_HW_SAMSUNG)
-/* CSP#505233: Flags to indicate if we distingish power off policy when
- * user set the memu "Keep Wi-Fi on during sleep" to "Never"
- */
-int sleep_never = 0;
-#endif
-
 static int
 dhd_stop(struct net_device *net)
 {
 	int ifidx;
 	dhd_info_t *dhd = *(dhd_info_t **)netdev_priv(net);
 	DHD_OS_WAKE_LOCK(&dhd->pub);
-	DHD_TRACE(("%s: (WAR TRACE)Enter %p\n", __FUNCTION__, net));
+	DHD_TRACE(("%s: Enter %p\n", __FUNCTION__, net));
 	if (dhd->pub.up == 0) {
 		goto exit;
 	}
@@ -2688,24 +2622,11 @@ dhd_stop(struct net_device *net)
 	dhd_prot_stop(&dhd->pub);
 
 #if defined(WL_CFG80211)
-	if (ifidx == 0) {
-		if (!dhd_download_fw_on_driverload)
-			wl_android_wifi_off(net);
-#ifdef CUSTOMER_HW_SAMSUNG
-		else {
-			/* CSP#505233: Flags to indicate if we distingish
-			 * power off policy when user set the memu
-			 * "Keep Wi-Fi on during sleep" to "Never"
-			 */
-			if (sleep_never) {
-				dhd_deepsleep(net, 1);
-				sleep_never = 0;
-			}
-		}
-#endif /* CUSTOMER_HW_SAMSUNG */
-	}
+	if (ifidx == 0 &&
+		(!dhd_download_fw_on_driverload ||
+		(suspend_power_off && dhd->pub.busstate != DHD_BUS_DOWN)))
+		wl_android_wifi_off(net);
 #endif /* WL_CFG80211 */
-	dhd->pub.dongle_trap_occured = 0;
 	dhd->pub.hang_was_sent = 0;
 	dhd->pub.rxcnt_timeout = 0;
 	dhd->pub.txcnt_timeout = 0;
@@ -2719,6 +2640,9 @@ static int
 dhd_open(struct net_device *net)
 {
 	dhd_info_t *dhd = *(dhd_info_t **)netdev_priv(net);
+#ifdef PROP_TXSTATUS
+	uint up = 0;
+#endif
 #ifdef TOE
 	uint32 toe_ol;
 #endif
@@ -2740,7 +2664,7 @@ dhd_open(struct net_device *net)
 						fw_path, firmware_path));
 					fw_changed = TRUE;
 				}
-#endif /* WL_CFG80211 */
+#endif
 			strcpy(fw_path, firmware_path);
 #if defined(BCM4334_CHECK_CHIP_REV)
 			strcpy(fw_down_path, fw_path);
@@ -2782,30 +2706,17 @@ dhd_open(struct net_device *net)
 			if (ret != 0) {
 				DHD_ERROR(("wl_android_wifi_on failed (%d)\n", ret));
 				goto exit;
-				}
-		} else {
-#ifdef CUSTOMER_HW_SAMSUNG
-			/* CSP#505233: Flags to indicate if we distingish
-			 * power off policy when user set the memu
-			 * "Keep Wi-Fi on during sleep" to "Never"
-			 */
-			if (sleep_never) {
-				dhd_deepsleep(net, 0);
-				sleep_never = 0;
-			} else {
-#endif /* CUSTOMER_HW_SAMSUNG */
-				if (fw_changed) {
-					wl_android_wifi_off(net);
-					msleep(300);
-					ret = wl_android_wifi_on(net);
-					if (ret != 0) {
-						DHD_ERROR(("wl_android_wifi_on failed (%d)\n", ret));
-						goto exit;
-					}
-				}
-#ifdef CUSTOMER_HW_SAMSUNG
 			}
-#endif /* CUSTOMER_HW_SAMSUNG */
+		} else {
+			if (fw_changed || suspend_power_off) {
+				wl_android_wifi_off(net);
+				msleep(300);
+				ret = wl_android_wifi_on(net);
+				if (ret != 0) {
+					DHD_ERROR(("wl_android_wifi_on failed (%d)\n", ret));
+					goto exit;
+				}
+			}
 		}
 #endif /* WL_CFG80211 */
 
@@ -2837,12 +2748,19 @@ dhd_open(struct net_device *net)
 			ret = -1;
 			goto exit;
 		}
+
+		/* CSP#505233: Flags to indicate if we distingish power off policy when
+		 * user set the memu "Keep Wi-Fi on during sleep" to "Never"
+		 */
+		if (!suspend_power_off)
+			suspend_power_off = TRUE;
 #endif /* WL_CFG80211 */
 	}
 
 	/* Allow transmit calls */
 	netif_start_queue(net);
 	dhd->pub.up = 1;
+
 #ifdef BCMDBGFS
 	dhd_dbg_init(&dhd->pub);
 #endif
@@ -2996,21 +2914,21 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 	DHD_TRACE(("%s: Enter\n", __FUNCTION__));
 
 #ifdef BCM4334_CHECK_CHIP_REV
-		DHD_ERROR(("CHIP VER = [0x%x]\n", g_chipver));
-		if (g_chipver == 1) {
-			DHD_ERROR(("----- CHIP bcm4334_B0 -----\n"));
-			strcpy(chipver_tag, "_b0");
-		} else if (g_chipver == 2) {
-			DHD_ERROR(("----- CHIP bcm4334_B1 -----\n"));
-			strcpy(chipver_tag, "_b1");
-		} else if (g_chipver == 3) {
-			DHD_ERROR(("----- CHIP bcm4334_B2 -----\n"));
-			strcpy(chipver_tag, "_b2");
+	DHD_ERROR(("CHIP VER = [0x%x]\n", g_chipver));
+	if (g_chipver == 1) {
+		DHD_ERROR(("----- CHIP bcm4334_B0 -----\n"));
+		strcpy(chipver_tag, "_b0");
+	} else if (g_chipver == 2) {
+		DHD_ERROR(("----- CHIP bcm4334_B1 -----\n"));
+		strcpy(chipver_tag, "_b1");
+	} else if (g_chipver == 3) {
+		DHD_ERROR(("----- CHIP bcm4334_B2 -----\n"));
+		strcpy(chipver_tag, "_b2");
 		}
 		else {
-			DHD_ERROR(("----- Invalid chip version -----\n"));
-			goto fail;
-		}
+		DHD_ERROR(("----- Invalid chip version -----\n"));
+		goto fail;
+	}
 #endif /* BCM4334_CHECK_CHIP_REV */
 
 	/* updates firmware nvram path if it was provided as module parameters */
@@ -3098,9 +3016,6 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_init(&dhd->wl_wifi, WAKE_LOCK_SUSPEND, "wlan_wake");
 	wake_lock_init(&dhd->wl_rxwake, WAKE_LOCK_SUSPEND, "wlan_rx_wake");
-#ifdef PNO_SUPPORT
-	wake_lock_init(&dhd->pub.pno_wakelock, WAKE_LOCK_SUSPEND, "pno_wake_lock");
-#endif
 #endif
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)) && 1
 	mutex_init(&dhd->dhd_net_if_mutex);
@@ -3242,15 +3157,15 @@ dhd_bus_start(dhd_pub_t *dhdp)
 	if  ((dhd->pub.busstate == DHD_BUS_DOWN) &&
 		(fw_path[0] != '\0') &&
 		(nv_path[0] != '\0')) {
-				down_path = fw_path;
+		down_path = fw_path;
 #if defined(BCM4334_CHECK_CHIP_REV)
-				strcpy(fw_down_path, fw_path);
-				strcat(fw_down_path, chipver_tag);
-				down_path = fw_down_path;
+		strcpy(fw_down_path, fw_path);
+		strcat(fw_down_path, chipver_tag);
+		down_path = fw_down_path;
 #endif
 		/* wake lock moved to dhdsdio_download_firmware */
 		if (!(dhd_bus_download_firmware(dhd->pub.bus, dhd->pub.osh,
-		                                down_path, nv_path))) {
+			down_path, nv_path))) {
 			DHD_ERROR(("%s: dhdsdio_probe_download failed. firmware = %s nvram = %s\n",
 			           __FUNCTION__, down_path, nv_path));
 #ifdef DHDTHREAD
@@ -3336,9 +3251,6 @@ dhd_bus_start(dhd_pub_t *dhdp)
 #ifdef RDWR_MACADDR
 	dhd_check_rdwr_macaddr(dhd, &dhd->pub, &dhd->pub.mac);
 #endif
-#ifdef RDWR_KORICS_MACADDR
-	dhd_write_rdwr_korics_macaddr(dhd, &dhd->pub.mac);
-#endif
 #endif /* CUSTOMER_HW_SAMSUNG */
 
 	/* Bus is ready, do any protocol initialization */
@@ -3353,6 +3265,10 @@ dhd_bus_start(dhd_pub_t *dhdp)
 	dhd_write_macaddr(&dhd->pub.mac);
 #endif
 #endif /* CUSTOMER_HW_SAMSUNG */
+
+#ifdef RDWR_KORICS_MACADDR
+dhd_write_rdwr_korics_macaddr(dhd, &dhd->pub.mac);
+#endif
 
 #ifdef ARP_OFFLOAD_SUPPORT
 	if (dhd->pend_ipaddr) {
@@ -3414,7 +3330,6 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	uint32 dongle_align = DHD_SDALIGN;
 #if defined(BCM4334_CHIP)
 	uint32 glom = 5; /* 2012.02.21 for perfomance */
-	uint32 bcn_li_bcn = 1;
 #elif defined(BCM43241_CHIP)
 	uint32 glom = 1;
 #else
@@ -3438,10 +3353,9 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 #ifdef CUSTOMER_HW_SAMSUNG
 #ifdef ROAM_ENABLE
 	uint roamvar = 0;
-	int roam_trigger[2] = {WL_AUTO_ROAM_TRIGGER, WLC_BAND_ALL};
+	int roam_trigger[2] = {-75, WLC_BAND_ALL};
 	int roam_scan_period[2] = {10, WLC_BAND_ALL};
 	int roam_delta[2] = {10, WLC_BAND_ALL};
-	int roam_env_mode = AP_ENV_INDETERMINATE;
 #ifdef FULL_ROAMING_SCAN_PERIOD_60_SEC
 	int roam_fullscan_period = 60;
 #else /* FULL_ROAMING_SCAN_PERIOD_60_SEC */
@@ -3479,18 +3393,16 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	int vlanmode = 0;
 #endif /* VLAN_MODE_OFF */
 #ifdef BCM43241_CHIP
-	int mimo_bw_cap = 2;
+	int mimo_bw_cap = 1;
 #endif /* BCM43241_CHIP */
-#ifdef AUTOCOUNTRY
-	int autocountry = 1;
-#endif
-#ifdef VSDB
-	int interference_mode = 3;
-#endif
+
 #ifdef PROP_TXSTATUS
 	dhd->wlfc_enabled = FALSE;
 	/* enable WLFC only if the firmware is VSDB */
 #endif /* PROP_TXSTATUS */
+#ifdef AUTOCOUNTRY
+	int autocountry = 1;
+#endif
 
 	DHD_TRACE(("Enter %s\n", __FUNCTION__));
 	dhd->op_mode = 0;
@@ -3649,13 +3561,6 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	dhd_wl_ioctl_cmd(dhd, WLC_SET_ROAM_DELTA, roam_delta, sizeof(roam_delta), TRUE, 0);
 	bcm_mkiovar("fullroamperiod", (char *)&roam_fullscan_period, 4, iovbuf, sizeof(iovbuf));
 	dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
-	if (roam_trigger[0] == WL_AUTO_ROAM_TRIGGER) {
-		bcm_mkiovar("roam_env_detection", (char *)&roam_env_mode, 4, iovbuf, sizeof(iovbuf));
-		if (dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0) == BCME_OK)
-			dhd->roam_env_detection = TRUE;
-		else
-			dhd->roam_env_detection = FALSE;
-	}
 #endif
 
 #ifdef OKC_SUPPORT
@@ -3752,9 +3657,7 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	setbit(eventmask, WLC_E_MIC_ERROR);
 	setbit(eventmask, WLC_E_ASSOC_REQ_IE);
 	setbit(eventmask, WLC_E_ASSOC_RESP_IE);
-#ifndef WL_CFG80211
 	setbit(eventmask, WLC_E_PMKID_CACHE);
-#endif
 	setbit(eventmask, WLC_E_TXFAIL);
 	setbit(eventmask, WLC_E_JOIN_START);
 	setbit(eventmask, WLC_E_SCAN_COMPLETE);
@@ -3764,9 +3667,6 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 #ifdef PNO_SUPPORT
 	setbit(eventmask, WLC_E_PFN_NET_FOUND);
 #endif /* PNO_SUPPORT */
-#ifdef USE_FW_TRACE
-	setbit(eventmask, WLC_E_TRACE);
-#endif
 	/* enable dongle roaming event */
 	setbit(eventmask, WLC_E_ROAM);
 #ifdef WL_CFG80211
@@ -3775,15 +3675,13 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 		setbit(eventmask, WLC_E_ACTION_FRAME_RX);
 		setbit(eventmask, WLC_E_ACTION_FRAME_COMPLETE);
 		setbit(eventmask, WLC_E_ACTION_FRAME_OFF_CHAN_COMPLETE);
+		setbit(eventmask, WLC_E_P2P_PROBREQ_MSG);
 		setbit(eventmask, WLC_E_P2P_DISC_LISTEN_COMPLETE);
 	}
 #endif /* WL_CFG80211 */
 #ifdef OKC_DEBUG
 	setbit(eventmask, WLC_E_ROAM_START);
 #endif /* OKC_DEBUG */
-#ifdef CUSTOMER_HW_SAMSUNG
-	clrbit(eventmask, WLC_E_TXFAIL);
-#endif
 
 	/* Write updated Event mask */
 	bcm_mkiovar("event_msgs", eventmask, WL_EVENTING_MASK_LEN, iovbuf, sizeof(iovbuf));
@@ -3826,13 +3724,10 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 #else
 	/* Setup filter to allow only unicast */
 #if defined(CUSTOMER_HW_SAMSUNG)
-	dhd->pktfilter_count = 5;
 	dhd->pktfilter[0] = "100 0 0 0 "
 		HEX_PREF_STR UNI_FILTER_STR ZERO_ADDR_STR ETHER_TYPE_STR IPV6_FILTER_STR
 		" "
 		HEX_PREF_STR ZERO_ADDR_STR ZERO_ADDR_STR ETHER_TYPE_STR ZERO_TYPE_STR;
-		dhd->pktfilter[4] = "104 0 0 0 0xFFFFFF 0x01005E";
-		/* customer want to get IPV4 multicast packets */
 #else
 #error Customer want to filter out all IPV6 packets
 	dhd->pktfilter[0] = "100 0 0 0 0x01 0x00";
@@ -3850,12 +3745,6 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 		}
 	}
 #endif /* defined(SOFTAP) */
-	if (dhd->pktfilter_count) {
-		int i;
-
-		for (i = 0; i < dhd->pktfilter_count; i++)
-			dhd_pktfilter_offload_set(dhd, dhd->pktfilter[i]);
-	}
 #endif /* PKT_FILTER_SUPPORT */
 
 #ifdef VLAN_MODE_OFF
@@ -3867,19 +3756,12 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 		DHD_ERROR(("%s: can't set country \n", __FUNCTION__));
 #endif
 
+
 	/* Force STA UP */
 	if ((ret = dhd_wl_ioctl_cmd(dhd, WLC_UP, (char *)&up, sizeof(up), TRUE, 0)) < 0) {
 		DHD_ERROR(("%s Setting WL UP failed %d\n", __FUNCTION__, ret));
 		goto done;
 	}
-#ifdef VSDB
-	dhd_wl_ioctl_cmd(dhd, WLC_SET_INTERFERENCE_MODE, (int *)&interference_mode, sizeof(int), TRUE, 0);
-#endif
-
-#ifdef BCM4334_CHIP
-	bcm_mkiovar("bcn_li_bcn", (char *)&bcn_li_bcn, 4, iovbuf, sizeof(iovbuf));
-	dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
-#endif
 
 	/* query for 'ver' to get version info from firmware */
 	memset(buf, 0, sizeof(buf));
@@ -4036,16 +3918,13 @@ static int dhd_device_event(struct notifier_block *this,
 			}
 
 #ifdef AOE_IP_ALIAS_SUPPORT
-			if ((dhd_pub->op_mode & HOSTAPD_MASK) != HOSTAPD_MASK) {
-				if (ifa->ifa_label[strlen(ifa->ifa_label)-2] == 0x3a) {
-					/* 0x3a = ':' */
-					DHD_ARPOE(("%s:add aliased IP to AOE hostip cache\n",
-						__FUNCTION__));
-					aoe_update_host_ipv4_table(dhd_pub, ifa->ifa_address, TRUE);
-				}
-				else
-					aoe_update_host_ipv4_table(dhd_pub, ifa->ifa_address, TRUE);
+			if (ifa->ifa_label[strlen(ifa->ifa_label)-2] == 0x3a) {
+				DHD_ARPOE(("%s:add aliased IP to AOE hostip cache\n",
+					__FUNCTION__));
+				aoe_update_host_ipv4_table(dhd_pub, ifa->ifa_address, TRUE);
 			}
+			else
+				aoe_update_host_ipv4_table(dhd_pub, ifa->ifa_address, TRUE);
 #endif
 			break;
 
@@ -4054,16 +3933,13 @@ static int dhd_device_event(struct notifier_block *this,
 				__FUNCTION__, ifa->ifa_label, ifa->ifa_address));
 			dhd->pend_ipaddr = 0;
 #ifdef AOE_IP_ALIAS_SUPPORT
-		if ((dhd_pub->op_mode & HOSTAPD_MASK) != HOSTAPD_MASK) {
-			if (!(ifa->ifa_label[strlen(ifa->ifa_label)-2] == 0x3a)) {
-					/* 0x3a = ':' */
-					DHD_ARPOE(("%s: primary interface is down, AOE clr all\n",
+		if (!(ifa->ifa_label[strlen(ifa->ifa_label)-2] == 0x3a)) {
+				DHD_ARPOE(("%s: primary interface is down, AOE clr all\n",
 				           __FUNCTION__));
-					dhd_aoe_hostip_clr(&dhd->pub);
-					dhd_aoe_arp_clr(&dhd->pub);
-			} else
-				aoe_update_host_ipv4_table(dhd_pub, ifa->ifa_address, FALSE);
-		}
+				dhd_aoe_hostip_clr(&dhd->pub);
+				dhd_aoe_arp_clr(&dhd->pub);
+		} else
+			aoe_update_host_ipv4_table(dhd_pub, ifa->ifa_address, FALSE);
 #else
 			dhd_aoe_hostip_clr(&dhd->pub);
 			dhd_aoe_arp_clr(&dhd->pub);
@@ -4079,6 +3955,7 @@ static int dhd_device_event(struct notifier_block *this,
 	return NOTIFY_DONE;
 }
 #endif /* ARP_OFFLOAD_SUPPORT */
+
 int
 dhd_net_attach(dhd_pub_t *dhdp, int ifidx)
 {
@@ -4118,7 +3995,6 @@ dhd_net_attach(dhd_pub_t *dhdp, int ifidx)
 #else
 		net->netdev_ops = &dhd_ops_pri;
 #endif /* LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 31) */
-		memcpy(temp_addr, dhd->pub.mac.octet, ETHER_ADDR_LEN);
 	} else {
 		/*
 		 * We have to use the primary MAC for virtual interfaces
@@ -4363,9 +4239,6 @@ void dhd_detach(dhd_pub_t *dhdp)
 		dhd->wakelock_timeout_enable = 0;
 		wake_lock_destroy(&dhd->wl_wifi);
 		wake_lock_destroy(&dhd->wl_rxwake);
-#ifdef PNO_SUPPORT
-	wake_lock_destroy(&dhdp->pno_wakelock);
-#endif
 #endif
 	}
 }
@@ -4645,9 +4518,6 @@ dhd_os_wd_timer(void *bus, uint wdtick)
 
 	DHD_TRACE(("%s: Enter\n", __FUNCTION__));
 
-	if (!dhd)
-		return;
-
 	flags = dhd_os_spin_lock(pub);
 
 	/* don't start the wd until fw is loaded */
@@ -4660,7 +4530,6 @@ dhd_os_wd_timer(void *bus, uint wdtick)
 	if (!wdtick && dhd->wd_timer_valid == TRUE) {
 		dhd->wd_timer_valid = FALSE;
 		dhd_os_spin_unlock(pub, flags);
-		if (dhd)
 #ifdef DHDTHREAD
 		del_timer_sync(&dhd->timer);
 #else
@@ -4986,7 +4855,7 @@ void dhd_wait_for_event(dhd_pub_t *dhd, bool *lockvar)
 #if 1 && (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 0))
 	struct dhd_info *dhdinfo =  dhd->info;
 	dhd_os_sdunlock(dhd);
-	wait_event_interruptible_timeout(dhdinfo->ctrl_wait, (*lockvar == FALSE), HZ * 5);
+	wait_event_interruptible_timeout(dhdinfo->ctrl_wait, (*lockvar == FALSE), HZ * 2);
 	dhd_os_sdlock(dhd);
 #endif
 	return;
@@ -5084,7 +4953,6 @@ int net_os_rxfilter_add_remove(struct net_device *dev, int add_remove, int num)
 		}
 	}
 	dhd->pub.pktfilter[num] = filterp;
-	dhd_pktfilter_offload_set(&dhd->pub, dhd->pub.pktfilter[num]);
 	return ret;
 #else
 	return 0;
@@ -5103,12 +4971,8 @@ int net_os_set_packet_filter(struct net_device *dev, int val)
 	*/
 	if (dhd && dhd->pub.up) {
 		if (dhd->pub.in_suspend) {
-			if (!val || (val && !dhd->pub.suspend_disable_flag)) {
-				int i;
-				for (i = 0; i < dhd->pub.pktfilter_count; i++)
-					dhd_pktfilter_offload_enable(&dhd->pub, dhd->pub.pktfilter[i],
-							val, dhd_master_mode);
-			}
+			if (!val || (val && !dhd->pub.suspend_disable_flag))
+				dhd_set_packet_filter(val, &dhd->pub);
 		}
 	}
 	return ret;
@@ -5341,21 +5205,6 @@ int net_os_wake_lock_timeout(struct net_device *dev)
 		ret = dhd_os_wake_lock_timeout(&dhd->pub);
 	return ret;
 }
-#if defined(PNO_SUPPORT) && defined(CONFIG_HAS_WAKELOCK)
-int net_os_wake_lock_timeout_for_pno(struct net_device *dev, int sec)
-{
-	dhd_info_t *dhd = *(dhd_info_t **)netdev_priv(dev);
-	int ret = 0;
-	unsigned long flags;
-
-	if (dhd) {
-		spin_lock_irqsave(&dhd->wakelock_spinlock, flags);
-		wake_lock_timeout(&dhd->pub.pno_wakelock, HZ * sec);
-		spin_unlock_irqrestore(&dhd->wakelock_spinlock, flags);
-	}
-	return ret;
-}
-#endif
 
 int dhd_os_wake_lock_timeout_enable(dhd_pub_t *pub, int val)
 {
@@ -5392,9 +5241,6 @@ int dhd_os_wake_lock(dhd_pub_t *pub)
 #ifdef CONFIG_HAS_WAKELOCK
 		if (!dhd->wakelock_counter)
 			wake_lock(&dhd->wl_wifi);
-#elif defined(CONFIG_PM_SLEEP) && defined(CUSTOMER_HW_SLP)
-		/*SLP_wakelock_alternative_code*/
-		pm_stay_awake(pm_dev);
 #endif
 		dhd->wakelock_counter++;
 		ret = dhd->wakelock_counter;
@@ -5427,9 +5273,6 @@ int dhd_os_wake_unlock(dhd_pub_t *pub)
 #ifdef CONFIG_HAS_WAKELOCK
 			if (!dhd->wakelock_counter)
 				wake_unlock(&dhd->wl_wifi);
-#elif defined(CONFIG_PM_SLEEP) && defined(CUSTOMER_HW_SLP)
-			/*SLP_wakelock_alternative_code*/
-			pm_relax(pm_dev);
 #endif
 			ret = dhd->wakelock_counter;
 		}
@@ -5449,19 +5292,6 @@ int dhd_os_check_wakelock(void *dhdp)
 	dhd = (dhd_info_t *)(pub->info);
 
 	if (dhd && wake_lock_active(&dhd->wl_wifi))
-		return 1;
-#elif defined(CONFIG_PM_SLEEP) && defined(CUSTOMER_HW_SLP)
-	/*SLP_wakelock_alternative_code*/
-	dhd_pub_t *pub = (dhd_pub_t *)dhdp;
-	dhd_info_t *dhd;
-
-	if (!pub)
-		return 0;
-	dhd = (dhd_info_t *)(pub->info);
-
-	DHD_ERROR(("%s : wakelock_count = %d\n", __func__, dhd->wakelock_counter ));
-
-	if (dhd && (dhd->wakelock_counter > 0))
 		return 1;
 #endif
 	return 0;
@@ -5517,75 +5347,6 @@ bool dhd_os_check_hang(dhd_pub_t *dhdp, int ifidx, int ret)
 	net = dhd_idx2net(dhdp, ifidx);
 	return dhd_check_hang(net, dhdp, ret);
 }
-
-#if defined(WL_CFG80211) && defined(CUSTOMER_HW_SAMSUNG)
-#define MAX_TRY_CNT		5 /* Number of tries to disable deepsleep */
-int dhd_deepsleep(struct net_device *dev, int flag)
-{
-	char iovbuf[20];
-	uint powervar = 0;
-	dhd_info_t *dhd;
-	dhd_pub_t *dhdp;
-	int cnt = 0;
-	int ret = 0;
-
-	dhd = *(dhd_info_t **)netdev_priv(dev);
-	dhdp = &dhd->pub;
-
-	switch (flag) {
-		case 1 :  /* Deepsleep on */
-			DHD_ERROR(("[WiFi] Deepsleep On\n"));
-			/* give some time to _dhd_sysioc_thread() before deepsleep */
-			msleep(200);
-			if (dhd_pkt_filter_enable) {
-				dhd_set_packet_filter(0, dhdp);
-			}
-			/* Disable MPC */
-			powervar = 0;
-			memset(iovbuf, 0, sizeof(iovbuf));
-			bcm_mkiovar("mpc", (char *)&powervar, 4, iovbuf, sizeof(iovbuf));
-			dhd_wl_ioctl_cmd(dhdp, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
-
-			/* Enable Deepsleep*/
-			powervar = 1;
-			memset(iovbuf, 0, sizeof(iovbuf));
-			bcm_mkiovar("deepsleep", (char *)&powervar, 4, iovbuf, sizeof(iovbuf));
-			dhd_wl_ioctl_cmd(dhdp, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
-			break;
-
-		case 0: /* Deepsleep Off */
-			DHD_ERROR(("[WiFi] Deepsleep Off\n"));
-
-			/* Disable Deepsleep */
-			for (cnt = 0; cnt < MAX_TRY_CNT; cnt++ ) {
-				powervar = 0;
-				memset(iovbuf, 0, sizeof(iovbuf));
-				bcm_mkiovar("deepsleep", (char *)&powervar, 4, iovbuf, sizeof(iovbuf));
-				dhd_wl_ioctl_cmd(dhdp, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
-
-				memset(iovbuf, 0, sizeof(iovbuf));
-				bcm_mkiovar("deepsleep", (char *)&powervar, 4, iovbuf, sizeof(iovbuf));
-				if ((ret = dhd_wl_ioctl_cmd(dhdp, WLC_GET_VAR, iovbuf, sizeof(iovbuf), FALSE, 0)) < 0) {
-					DHD_ERROR(("the error of dhd deepsleep status ret value : %d\n",ret));
-				} else {
-					if(!(*(int *)iovbuf )) {
-						DHD_ERROR(("deepsleep mode is 0, ok , count : %d\n",cnt));
-						break;
-					}
-				}
-			}
-
-			/* Enable MPC */
-			powervar = 1;
-			memset(iovbuf, 0, sizeof(iovbuf));
-			bcm_mkiovar("mpc", (char *)&powervar, 4, iovbuf, sizeof(iovbuf));
-			dhd_wl_ioctl_cmd(dhdp, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
-			break;
-	}
-
-	return 0;
-}
-#endif /* CUSTOMER_HW_SAMSUNG */
 
 #ifdef PROP_TXSTATUS
 extern int dhd_wlfc_interface_entry_update(void* state,	ewlfc_mac_entry_action_t action, uint8 ifid,

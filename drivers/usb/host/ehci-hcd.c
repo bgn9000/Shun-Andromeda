@@ -808,13 +808,8 @@ static irqreturn_t ehci_irq (struct usb_hcd *hcd)
 		goto dead;
 	}
 
-	/*
-	 * We don't use STS_FLR, but some controllers don't like it to
-	 * remain on, so mask it out along with the other status bits.
-	 */
-	masked_status = status & (INTR_MASK | STS_FLR);
-
 	/* Shared IRQ? */
+	masked_status = status & INTR_MASK;
 	if (!masked_status || unlikely(hcd->state == HC_STATE_HALT)) {
 		spin_unlock(&ehci->lock);
 		return IRQ_NONE;
@@ -865,7 +860,7 @@ static irqreturn_t ehci_irq (struct usb_hcd *hcd)
 		pcd_status = status;
 
 		/* resume root hub? */
-		if (hcd->state == HC_STATE_SUSPENDED)
+		if (!(cmd & CMD_RUN))
 			usb_hcd_resume_root_hub(hcd);
 
 		/* get per-port change detect bits */
@@ -909,13 +904,7 @@ static irqreturn_t ehci_irq (struct usb_hcd *hcd)
 			 * stop that signaling.  Use 5 ms extra for safety,
 			 * like usb_port_resume() does.
 			 */
-#ifdef CONFIG_LINK_DEVICE_HSIC
-			/* ensure suspend bit clear by adding 5 msec delay. */
-			ehci->reset_done[i] = jiffies + msecs_to_jiffies(30);
-#else
 			ehci->reset_done[i] = jiffies + msecs_to_jiffies(25);
-#endif
-
 			ehci_dbg (ehci, "port %d remote wakeup\n", i + 1);
 			mod_timer(&hcd->rh_timer, ehci->reset_done[i]);
 		}

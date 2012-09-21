@@ -51,9 +51,6 @@
 #if defined(CONFIG_S5P_MEM_CMA)
 #include <linux/cma.h>
 #endif
-#ifdef CONFIG_ANDROID_RAM_CONSOLE
-#include <linux/bootmem.h>
-#endif
 #ifdef CONFIG_ANDROID_PMEM
 #include <linux/android_pmem.h>
 #endif
@@ -2291,7 +2288,7 @@ REGULATOR_INIT(ldo11, "TOUCH_2.8V", 2800000, 2800000, 0,
 		REGULATOR_CHANGE_STATUS, 1);
 REGULATOR_INIT(ldo12, "VT_CAM_1.8V", 1800000, 1800000, 0,
 		REGULATOR_CHANGE_STATUS, 1);
-REGULATOR_INIT(ldo13, "VCC_3.0V_LCD", 2800000, 2800000, 1,
+REGULATOR_INIT(ldo13, "VCC_3.0V_LCD", 3000000, 3000000, 1,
 		REGULATOR_CHANGE_STATUS, 1);
 #ifdef CONFIG_MACH_Q1_BD
 REGULATOR_INIT(ldo14, "VCC_2.2V_LCD", 2200000, 2200000, 1,
@@ -2306,7 +2303,7 @@ REGULATOR_INIT(ldo16, "CAM_SENSOR_IO_1.8V", 1800000, 1800000, 0,
 		REGULATOR_CHANGE_STATUS, 1);
 REGULATOR_INIT(ldo17, "VTF_2.8V", 2800000, 2800000, 0,
 		REGULATOR_CHANGE_STATUS, 1);
-REGULATOR_INIT(ldo18, "TOUCH_LED_3.3V", 2500000, 3300000, 0,
+REGULATOR_INIT(ldo18, "TOUCH_LED_3.3V", 3000000, 3300000, 0,
 		REGULATOR_CHANGE_STATUS | REGULATOR_CHANGE_VOLTAGE, 1);
 REGULATOR_INIT(ldo21, "VDDQ_M1M2_1.2V", 1200000, 1200000, 1,
 		REGULATOR_CHANGE_STATUS, 1);
@@ -2353,7 +2350,7 @@ static struct regulator_init_data buck2_init_data = {
 static struct regulator_init_data buck3_init_data = {
 	.constraints	= {
 		.name		= "G3D_1.1V",
-		.min_uV		= 800000,
+		.min_uV		= 900000,
 		.max_uV		= 1200000,
 		.always_on	= 0,
 		.boot_on	= 0,
@@ -2387,12 +2384,12 @@ static struct regulator_init_data buck4_init_data = {
 static struct regulator_init_data buck5_init_data = {
 	.constraints	= {
 		.name		= "VMEM_1.2V",
-		.min_uV		= 1100000,
-		.max_uV		= 1100000,
+		.min_uV		= 1200000,
+		.max_uV		= 1200000,
 		.apply_uV	= 1,
 		.always_on	= 1,
 		.state_mem	= {
-			.uV	= 1100000,
+			.uV	= 1200000,
 			.mode	= REGULATOR_MODE_NORMAL,
 			.enabled = 1,
 		},
@@ -2675,11 +2672,7 @@ static int max8997_muic_charger_cb(int cable_type)
 
 	if (!psy) {
 		pr_err("%s: fail to get battery ps\n", __func__);
-#if defined(CONFIG_MACH_Q1_BD)
-		return 0;
-#else
 		return -ENODEV;
-#endif
 	}
 
 	switch (cable_type) {
@@ -2697,7 +2690,6 @@ static int max8997_muic_charger_cb(int cable_type)
 		is_cable_attached = true;
 		break;
 	case CABLE_TYPE_MHL_VB:
-	case CABLE_TYPE_OTG_VB:
 		value.intval = POWER_SUPPLY_TYPE_MISC;
 		is_cable_attached = true;
 		break;
@@ -2722,36 +2714,12 @@ static int max8997_muic_charger_cb(int cable_type)
 #ifdef CONFIG_USB_HOST_NOTIFY
 static void usb_otg_accessory_power(int enable)
 {
-#ifdef CONFIG_SMB328_CHARGER	/* Q1_EUR_OPEN */
-	u8 on = (u8)!!enable;
-	struct power_supply *psy_sub =
-		power_supply_get_by_name("smb328-charger");
-	union power_supply_propval value;
-	int ret;
-
-	if (!psy_sub) {
-		pr_info("%s: fail to get charger ps\n", __func__);
-		return;
-	}
-
-	value.intval = on;
-	ret = psy_sub->set_property(psy_sub,
-		POWER_SUPPLY_PROP_CHARGE_TYPE, /* only for OTG */
-		&value);
-	if (ret) {
-		pr_info("%s: fail to set OTG (%d)\n",
-			__func__, ret);
-		return;
-	}
-	pr_info("%s: otg power = %d\n", __func__, on);
-#else
 	u8 on = (u8)!!enable;
 
 	gpio_request(GPIO_USB_OTG_EN, "USB_OTG_EN");
 	gpio_direction_output(GPIO_USB_OTG_EN, on);
 	gpio_free(GPIO_USB_OTG_EN);
 	pr_info("%s: otg accessory power = %d\n", __func__, on);
-#endif
 }
 
 static struct host_notifier_platform_data host_notifier_pdata = {
@@ -2765,7 +2733,7 @@ struct platform_device host_notifier_device = {
 };
 
 #include "u1-otg.c"
-static void max8997_muic_usb_cb(u8 usb_mode, bool bus_powered)
+static void max8997_muic_usb_cb(u8 usb_mode)
 {
 	struct s3c_udc *udc = platform_get_drvdata(&s3c_device_usbgadget);
 	int ret = 0;
@@ -2804,19 +2772,16 @@ static void max8997_muic_usb_cb(u8 usb_mode, bool bus_powered)
 #endif
 
 	if (udc) {
-		if (usb_mode == USB_OTGHOST_ATTACHED && !bus_powered) {
+		if (usb_mode == USB_OTGHOST_ATTACHED) {
 			usb_otg_accessory_power(1);
 			max8997_muic_charger_cb(CABLE_TYPE_OTG);
-		} else if (usb_mode == USB_OTGHOST_ATTACHED) {
-			pr_info("%s: usb vbus powered host\n", __func__);
-			usb_otg_accessory_power(0);
 		}
 
 		ret = c210_change_usb_mode(udc, usb_mode);
 		if (ret < 0)
 			pr_err("%s: fail to change mode!!!\n", __func__);
 
-		if (usb_mode == USB_OTGHOST_DETACHED && !bus_powered)
+		if (usb_mode == USB_OTGHOST_DETACHED)
 			usb_otg_accessory_power(0);
 	} else
 		pr_info("otg error s3c_udc is null.\n");
@@ -2956,7 +2921,7 @@ static struct max8997_platform_data exynos4_max8997_info = {
 	.buck1_gpiodvs	= false,
 	.buck1_max_vol	= 1350000,
 	.buck2_max_vol	= 1150000,
-	.buck5_max_vol	= 1100000,
+	.buck5_max_vol	= 1200000,
 	.buck_set1 = GPIO_BUCK1_EN_A,
 	.buck_set2 = GPIO_BUCK1_EN_B,
 	.buck_set3 = GPIO_BUCK2_EN,
@@ -3005,9 +2970,6 @@ static void set_shared_mic_bias(void)
 void sec_set_sub_mic_bias(bool on)
 {
 #ifdef CONFIG_SND_SOC_USE_EXTERNAL_MIC_BIAS
-#if defined(CONFIG_MACH_Q1_BD)
-	gpio_set_value(GPIO_SUB_MIC_BIAS_EN, on);
-#else
 	if (system_rev < SYSTEM_REV_SND) {
 		unsigned long flags;
 		spin_lock_irqsave(&mic_bias_lock, flags);
@@ -3016,16 +2978,13 @@ void sec_set_sub_mic_bias(bool on)
 		spin_unlock_irqrestore(&mic_bias_lock, flags);
 	} else
 		gpio_set_value(GPIO_SUB_MIC_BIAS_EN, on);
-#endif
+
 #endif
 }
 
 void sec_set_main_mic_bias(bool on)
 {
 #ifdef CONFIG_SND_SOC_USE_EXTERNAL_MIC_BIAS
-#if defined(CONFIG_MACH_Q1_BD)
-	gpio_set_value(GPIO_MIC_BIAS_EN, on);
-#else
 	if (system_rev < SYSTEM_REV_SND) {
 		unsigned long flags;
 		spin_lock_irqsave(&mic_bias_lock, flags);
@@ -3034,7 +2993,6 @@ void sec_set_main_mic_bias(bool on)
 		spin_unlock_irqrestore(&mic_bias_lock, flags);
 	} else
 		gpio_set_value(GPIO_MIC_BIAS_EN, on);
-#endif
 #endif
 }
 
@@ -3090,16 +3048,6 @@ static void u1_sound_init(void)
 	gpio_set_value(GPIO_EAR_MIC_BIAS_EN, 0);
 	gpio_free(GPIO_EAR_MIC_BIAS_EN);
 
-#if defined(CONFIG_MACH_Q1_BD)
-	err = gpio_request(GPIO_SUB_MIC_BIAS_EN, "submic_bias");
-	if (err) {
-		pr_err(KERN_ERR "SUB_MIC_BIAS_EN GPIO set error!\n");
-		return;
-	}
-	gpio_direction_output(GPIO_SUB_MIC_BIAS_EN, 1);
-	gpio_set_value(GPIO_SUB_MIC_BIAS_EN, 0);
-	gpio_free(GPIO_SUB_MIC_BIAS_EN);
-#else
 	if (system_rev >= SYSTEM_REV_SND) {
 		err = gpio_request(GPIO_SUB_MIC_BIAS_EN, "submic_bias");
 		if (err) {
@@ -3109,7 +3057,6 @@ static void u1_sound_init(void)
 		gpio_direction_output(GPIO_SUB_MIC_BIAS_EN, 0);
 		gpio_free(GPIO_SUB_MIC_BIAS_EN);
 	}
-#endif /* defined(CONFIG_MACH_Q1_BD) */
 #endif
 }
 #endif
@@ -3871,14 +3818,10 @@ struct platform_device u1_keypad = {
 #ifdef CONFIG_SEC_DEV_JACK
 static void sec_set_jack_micbias(bool on)
 {
-#if defined(CONFIG_MACH_Q1_BD)
-	gpio_set_value(GPIO_EAR_MIC_BIAS_EN, on);
-#else
 	if (system_rev >= 3)
 		gpio_set_value(GPIO_EAR_MIC_BIAS_EN, on);
 	else
 		gpio_set_value(GPIO_MIC_BIAS_EN, on);
-#endif
 }
 
 static struct sec_jack_zone sec_jack_zones[] = {
@@ -3914,13 +3857,8 @@ static struct sec_jack_zone sec_jack_zones[] = {
 		 * stays in this range for 100ms (10ms delays, 10 samples)
 		 */
 		.adc_high = 3800,
-#if defined (CONFIG_MACH_Q1_BD)
-		.delay_ms = 15,
-		.check_count = 20,
-#else
 		.delay_ms = 10,
 		.check_count = 5,
-#endif
 		.jack_type = SEC_HEADSET_4POLE,
 	},
 	{
@@ -4010,8 +3948,8 @@ static void mxt224_power_off(void)
   Configuration for MXT224
 */
 #define MXT224_THRESHOLD_BATT		40
-#define MXT224_THRESHOLD_BATT_INIT		50
-#define MXT224_THRESHOLD_CHRG		55
+#define MXT224_THRESHOLD_BATT_INIT		55
+#define MXT224_THRESHOLD_CHRG		70
 #define MXT224_NOISE_THRESHOLD_BATT		30
 #define MXT224_NOISE_THRESHOLD_CHRG		40
 #define MXT224_MOVFILTER_BATT		11
@@ -4032,7 +3970,7 @@ static u8 t8_config[] = { GEN_ACQUISITIONCONFIG_T8,
 static u8 t9_config[] = { TOUCH_MULTITOUCHSCREEN_T9,
 	131, 0, 0, 19, 11, 0, 32, MXT224_THRESHOLD_BATT, 2, 1,
 	0,
-	5,			/* MOVHYSTI */
+	15,			/* MOVHYSTI */
 	1, MXT224_MOVFILTER_BATT, MXT224_MAX_MT_FINGERS, 5, 40, 10, 31, 3,
 	223, 1, 0, 0, 0, 0, 143, 55, 143, 90, 18
 };
@@ -4048,7 +3986,6 @@ static u8 t20_config[] = { PROCI_GRIPFACESUPPRESSION_T20,
 static u8 t22_config[] = { PROCG_NOISESUPPRESSION_T22,
 	143, 0, 0, 0, 0, 0, 0, 3, MXT224_NOISE_THRESHOLD_BATT, 0,
 	0, 29, 34, 39, 49, 58, 3
-//	0, 10, 12, 18, 20, 29, 3
 };
 
 static u8 t28_config[] = { SPT_CTECONFIG_T28,
@@ -4173,7 +4110,7 @@ static u8 t8_config_e[] = { GEN_ACQUISITIONCONFIG_T8,
 static u8 t9_config_e[] = { TOUCH_MULTITOUCHSCREEN_T9,
 	139, 0, 0, 19, 11, 0, MXT224E_BLEN_BATT, MXT224E_THRESHOLD_BATT, 2, 1,
 	10,
-	5,			/* MOVHYSTI */
+	10,			/* MOVHYSTI */
 	1, MXT224E_MOVFILTER_BATT, MXT224_MAX_MT_FINGERS, 5, 40, 10, 31, 3,
 	223, 1, 10, 10, 10, 10, 143, 40, 143, 80,
 	18, 15, 50, 50, 0
@@ -4183,7 +4120,7 @@ static u8 t9_config_e[] = { TOUCH_MULTITOUCHSCREEN_T9,
 static u8 t9_config_e[] = { TOUCH_MULTITOUCHSCREEN_T9,
 	139, 0, 0, 19, 11, 0, MXT224E_BLEN_BATT, MXT224E_THRESHOLD_BATT, 2, 1,
 	10,
-	5,			/* MOVHYSTI */
+	10,			/* MOVHYSTI */
 	1, MXT224E_MOVFILTER_BATT, MXT224_MAX_MT_FINGERS, 5, 40, 10, 31, 3,
 	223, 1, 10, 10, 10, 10, 143, 40, 143, 80,
 	18, 15, 50, 50, 2
@@ -4193,7 +4130,7 @@ static u8 t9_config_e[] = { TOUCH_MULTITOUCHSCREEN_T9,
 static u8 t9_config_e[] = { TOUCH_MULTITOUCHSCREEN_T9,
 	139, 0, 0, 19, 11, 0, MXT224E_BLEN_BATT, MXT224E_THRESHOLD_BATT, 2, 1,
 	10,
-	5,			/* MOVHYSTI */
+	15,			/* MOVHYSTI */
 	1, MXT224E_MOVFILTER_BATT, MXT224_MAX_MT_FINGERS, 5, 40, 10, 31, 3,
 	223, 1, 10, 10, 10, 10, 143, 40, 143, 80,
 	18, 15, 50, 50, MXT224E_NEXTTCHDI_NORMAL
@@ -4898,7 +4835,7 @@ static int max17042_low_batt_cb(void)
 #ifdef RECAL_SOC_FOR_MAXIM
 static bool max17042_need_soc_recal(void)
 {
-	pr_debug("%s: HW(0x%x)\n", __func__, system_rev);
+	pr_info("%s: HW(0x%x)\n", __func__, system_rev);
 
 	if (system_rev >= NO_NEED_RECAL_SOC_HW_REV)
 		return false;
@@ -5420,53 +5357,6 @@ static void __init mipi_fb_init(void)
 }
 #endif
 
-#ifdef CONFIG_ANDROID_RAM_CONSOLE
-static struct resource ram_console_resource[] = {
-	{
-		.flags = IORESOURCE_MEM,
-	}
-};
-
-static struct platform_device ram_console_device = {
-	.name = "ram_console",
-	.id = -1,
-	.num_resources = ARRAY_SIZE(ram_console_resource),
-	.resource = ram_console_resource,
-};
-
-#define RAM_CONSOLE_CMDLINE ("0x100000@0x5e900000")
-
-static int __init setup_ram_console_mem(char *str)
-{
-	unsigned size;
-	str = RAM_CONSOLE_CMDLINE;
-	size = memparse(str, &str);
-
-	if (size && (*str == '@')) {
-		unsigned long long base = 0;
-
-		base = simple_strtoul(++str, &str, 0);
-		if (reserve_bootmem(base, size, BOOTMEM_EXCLUSIVE)) {
-			pr_err("%s: failed reserving size %d "
-			       "at base 0x%llx\n", __func__, size, base);
-			return -1;
-		}
-
-		ram_console_resource[0].start = base;
-		ram_console_resource[0].end = base + size - 1;
-		pr_err("%s: %x at %llx\n", __func__, size, base);
-	}
-	return 0;
-}
-
-/* without modifying the bootloader or harcoding cmdlines (which can mess up reboots), no way to pass 
-   a ram_console command line.  Just work around that little issue by triggering on a different parameter
-   and hardcoding the parameters to ram_console in the function */
-__setup("loglevel=", setup_ram_console_mem);
-
-/* __setup("ram_console=", setup_ram_console_mem); */
-#endif
-
 #ifdef CONFIG_ANDROID_PMEM
 static struct android_pmem_platform_data pmem_pdata = {
 	.name = "pmem",
@@ -5784,9 +5674,6 @@ static struct platform_device *smdkc210_devices[] __initdata = {
 	&s5p_device_tvout,
 	&s5p_device_cec,
 	&s5p_device_hpd,
-#endif
-#ifdef CONFIG_ANDROID_RAM_CONSOLE
-	&ram_console_device,
 #endif
 #ifdef CONFIG_ANDROID_PMEM
 	&pmem_device,
@@ -6285,15 +6172,9 @@ static void __init smdkc210_machine_init(void)
 				ARRAY_SIZE(i2c_devs10_emul));
 #endif
 #ifdef CONFIG_S3C_DEV_I2C11_EMUL
-#if defined (CONFIG_SENSORS_CM3663)
 	s3c_gpio_setpull(GPIO_PS_ALS_INT, S3C_GPIO_PULL_NONE);
 	i2c_register_board_info(11, i2c_devs11_emul,
 				ARRAY_SIZE(i2c_devs11_emul));
-#endif
-#if defined (CONFIG_MACH_Q1_BD)
-	i2c_register_board_info(11, i2c_devs11_emul,
-				ARRAY_SIZE(i2c_devs11_emul));
-#endif
 #endif
 #ifdef CONFIG_S3C_DEV_I2C14_EMUL
 	nfc_setup_gpio();

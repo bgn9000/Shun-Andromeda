@@ -22,7 +22,6 @@
  */
 
 #include "s3c_udc.h"
-#include <linux/clk.h>
 #include <linux/platform_device.h>
 #include <mach/map.h>
 #include <plat/regs-otg.h>
@@ -244,7 +243,6 @@ static void udc_disable(struct s3c_udc *dev)
 	udelay(20);
 	if (pdata && pdata->phy_exit)
 		pdata->phy_exit(pdev, S5P_USB_PHY_DEVICE);
-	clk_disable(dev->clk);
 }
 
 /*
@@ -290,7 +288,6 @@ static int udc_enable(struct s3c_udc *dev)
 	DEBUG_SETUP("%s: %p\n", __func__, dev);
 
 	enable_irq(dev->irq);
-	clk_enable(dev->clk);
 	if (pdata->phy_init)
 		pdata->phy_init(pdev, S5P_USB_PHY_DEVICE);
 	reconfig_usbd();
@@ -318,15 +315,10 @@ int s3c_vbus_enable(struct usb_gadget *gadget, int is_active)
 			stop_activity(dev, dev->driver);
 			spin_unlock_irqrestore(&dev->lock, flags);
 			udc_disable(dev);
-#if defined(CONFIG_BATTERY_SAMSUNG)
-			s3c_udc_cable_disconnect(dev);
-#endif
 			wake_lock_timeout(&dev->usbd_wake_lock, HZ * 5);
-			wake_lock_timeout(&dev->usb_cb_wake_lock, HZ * 5);
 		} else {
 			printk(KERN_DEBUG "usb: %s is_active=%d(udc_enable)\n",
 					__func__, is_active);
-			wake_lock(&dev->usb_cb_wake_lock);
 			udc_reinit(dev);
 			udc_enable(dev);
 		}
@@ -382,8 +374,9 @@ int usb_gadget_probe_driver(struct usb_gadget_driver *driver,
 		return retval;
 	}
 #if defined(CONFIG_USB_EXYNOS_SWITCH) || defined(CONFIG_MFD_MAX77693)\
-	|| defined(CONFIG_MFD_MAX8997) || defined(CONFIG_MFD_MAX77686)
+	|| defined(CONFIG_MFD_MAX8997)
 	printk(KERN_INFO "usb: Skip udc_enable\n");
+
 #else
 	printk(KERN_INFO "usb: udc_enable\n");
 	udc_enable(dev);
@@ -1168,10 +1161,6 @@ static int s3c_udc_probe(struct platform_device *pdev)
 	unsigned int irq;
 	int retval;
 
-	if (!pdev) {
-		pr_err("%s: pdev is null\n", __func__);
-		return -EINVAL;
-	}
 	DEBUG("%s: %p\n", __func__, pdev);
 
 	pdata = pdev->dev.platform_data;
@@ -1224,8 +1213,6 @@ static int s3c_udc_probe(struct platform_device *pdev)
 	udc_reinit(dev);
 	wake_lock_init(&dev->usbd_wake_lock, WAKE_LOCK_SUSPEND,
 			"usb device wake lock");
-	wake_lock_init(&dev->usb_cb_wake_lock, WAKE_LOCK_SUSPEND,
-			"usb cb wake lock");
 
 	/* irq setup after old hardware state is cleaned up */
 	irq = platform_get_irq(pdev, 0);
@@ -1242,13 +1229,6 @@ static int s3c_udc_probe(struct platform_device *pdev)
 	dev->irq = irq;
 	disable_irq(dev->irq);
 
-	dev->clk = clk_get(&pdev->dev, "usbotg");
-
-	if (IS_ERR(dev->clk)) {
-		dev_err(&pdev->dev, "Failed to get clock\n");
-		goto err_irq;
-	}
-
 	dev->usb_ctrl = dma_alloc_coherent(&pdev->dev,
 			sizeof(struct usb_ctrlrequest)*BACK2BACK_SIZE,
 			&dev->usb_ctrl_dma, GFP_KERNEL);
@@ -1257,14 +1237,12 @@ static int s3c_udc_probe(struct platform_device *pdev)
 		DEBUG(KERN_ERR "%s: can't get usb_ctrl dma memory\n",
 			driver_name);
 		retval = -ENOMEM;
-		goto err_clk;
+		goto err_irq;
 	}
 
 	create_proc_files();
 
 	return retval;
-err_clk:
-	clk_put(dev->clk);
 err_irq:
 	free_irq(dev->irq, dev);
 err_regs:
@@ -1283,7 +1261,6 @@ static int s3c_udc_remove(struct platform_device *pdev)
 
 	remove_proc_files();
 	usb_gadget_unregister_driver(dev->driver);
-	clk_put(dev->clk);
 	if (dev->usb_ctrl)
 		dma_free_coherent(&pdev->dev,
 				sizeof(struct usb_ctrlrequest)*BACK2BACK_SIZE,
@@ -1297,7 +1274,6 @@ static int s3c_udc_remove(struct platform_device *pdev)
 
 	the_controller = 0;
 	wake_lock_destroy(&dev->usbd_wake_lock);
-	wake_lock_destroy(&dev->usb_cb_wake_lock);
 
 	return 0;
 }
@@ -1327,8 +1303,8 @@ static int s3c_udc_suspend(struct platform_device *pdev, pm_message_t state)
 			dev->driver->disconnect(&dev->gadget);
 
 #if defined(CONFIG_USB_EXYNOS_SWITCH) || defined(CONFIG_MFD_MAX77693)\
-	|| defined(CONFIG_MFD_MAX8997) || defined(CONFIG_MFD_MAX77686)
-	/* Nothing to do */
+		|| defined(CONFIG_MFD_MAX8997)
+		/* Nothing to do */
 #else
 		udc_disable(dev);
 #endif
@@ -1344,8 +1320,8 @@ static int s3c_udc_resume(struct platform_device *pdev)
 	if (dev->driver) {
 		udc_reinit(dev);
 #if defined(CONFIG_USB_EXYNOS_SWITCH) || defined(CONFIG_MFD_MAX77693)\
-	|| defined(CONFIG_MFD_MAX8997) || defined(CONFIG_MFD_MAX77686)
-	/* Nothing to do */
+		|| defined(CONFIG_MFD_MAX8997)
+		/* Nothing to do */
 #else
 		udc_enable(dev);
 #endif

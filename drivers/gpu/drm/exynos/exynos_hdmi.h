@@ -28,55 +28,10 @@
 #ifndef _EXYNOS_HDMI_H_
 #define _EXYNOS_HDMI_H_
 
-struct hdmi_resources {
-	struct clk *hdmi;
-	struct clk *sclk_hdmi;
-	struct clk *sclk_pixel;
-	struct clk *sclk_hdmiphy;
-	struct clk *hdmiphy;
-	struct regulator_bulk_data *regul_bulk;
-	int regul_count;
-};
-
-struct hdmi_context {
-	struct device			*dev;
-	struct drm_device		*drm_dev;
-	struct fb_videomode		*default_timing;
-	unsigned int			default_win;
-	unsigned int			default_bpp;
-	bool				hpd_handle;
-	bool				enabled;
-
-	struct resource			*regs_res;
-	/** base address of HDMI registers */
-	void __iomem *regs;
-	/** HDMI hotplug interrupt */
-	unsigned int irq;
-	/** workqueue for delayed work */
-	struct workqueue_struct *wq;
-	/** hotplug handling work */
-	struct work_struct hotplug_work;
-
-	struct i2c_client *ddc_port;
-	struct i2c_client *hdmiphy_port;
-
-	/** current hdmiphy conf index */
-	int cur_conf;
-	/** other resources */
-	struct hdmi_resources res;
-
-	void *parent_ctx;
-};
-
-
 void hdmi_attach_ddc_client(struct i2c_client *ddc);
 void hdmi_attach_hdmiphy_client(struct i2c_client *hdmiphy);
 
-/* FIXME */
 extern struct i2c_driver hdmiphy_driver;
 extern struct i2c_driver ddc_driver;
-
-extern struct platform_driver hdmi_driver;
-extern struct platform_driver mixer_driver;
 
 #endif

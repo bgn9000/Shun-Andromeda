@@ -40,27 +40,10 @@
 #define HW_OOB
 #endif
 
-/* Q1 also uses this feature */
-#if defined(CONFIG_MACH_U1) || defined(CONFIG_MACH_TRATS)
-#ifdef CONFIG_MACH_Q1_BD
-#define HW_OOB
-#endif
+#ifdef CONFIG_MACH_U1
 #define USE_CID_CHECK
+#define U1_MACADDR
 #define WRITE_MACADDR
-#endif
-
-#ifdef CONFIG_ARCH_MSM7X30
-#define HW_OOB
-#define READ_MACADDR
-#endif
-
-#ifdef CONFIG_MACH_GC1
-#undef USE_CID_CHECK
-#define READ_MACADDR
-#endif
-
-#ifdef CONFIG_MACH_P10
-#define READ_MACADDR
 #endif
 
 /* REGION CODE */
@@ -73,7 +56,7 @@
 #endif
 
 #if (WLAN_REGION_CODE >= 200) && (WLAN_REGION_CODE < 300) /* KOR */
-#undef USE_INITIAL_2G_SCAN_ORG
+#undef USE_INITIAL_2G_SCAN
 #ifndef ROAM_ENABLE
 #define ROAM_ENABLE
 #endif
@@ -98,7 +81,7 @@
 #undef WRITE_MACADDR
 #undef READ_MACADDR
 #ifdef CONFIG_BCM4334
-#define READ_MACADDR
+#define RDWR_KORICS_MACADDR
 #else
 #define RDWR_MACADDR
 #endif
@@ -119,9 +102,5 @@
 #if (WLAN_REGION_CODE >= 300) && (WLAN_REGION_CODE < 400) /* CHN */
 #define BCMWAPI_WPI
 #define BCMWAPI_WAI
-#endif
-
-#if !defined(READ_MACADDR) && !defined(WRITE_MACADDR) && !defined(RDWR_KORICS_MACADDR) && !defined(RDWR_MACADDR)
-#define GET_MAC_FROM_OTP
 #endif
 

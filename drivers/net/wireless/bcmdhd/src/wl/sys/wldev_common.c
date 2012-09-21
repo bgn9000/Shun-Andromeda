@@ -31,7 +31,6 @@
 
 #include <wldev_common.h>
 #include <bcmutils.h>
-#include <wl_iw.h>
 
 #define htod32(i) i
 #define htod16(i) i
@@ -42,14 +41,8 @@
 
 #define	WLDEV_ERROR(args)						\
 	do {										\
-		printk(KERN_ERR "WLDEV-INFO2) %s : ", __func__);	\
+		printk(KERN_ERR "WLDEV-ERROR) %s : ", __func__);	\
 		printk args;							\
-	} while (0)
-
-#define	WLDEV_INFO(args)						\
-	do {								\
-		printk(KERN_INFO "WLDEV-INFO) %s : ", __func__);	\
-		printk args;					\
 	} while (0)
 
 extern int dhd_ioctl_entry_local(struct net_device *net, wl_ioctl_t *ioc, int cmd);
@@ -229,12 +222,8 @@ s32 wldev_iovar_setbuf_bsscfg(
 	iovar_len = wldev_mkiovar_bsscfg(iovar_name, param, paramlen, buf, buflen, bsscfg_idx);
 	if (iovar_len > 0)
 		ret = wldev_ioctl(dev, WLC_SET_VAR, buf, iovar_len, TRUE);
-	else {
-		if (buf_sync) {
-			mutex_unlock(buf_sync);
-		}
+	else
 		return BCME_BUFTOOSHORT;
-	}
 	if (buf_sync) {
 		mutex_unlock(buf_sync);
 	}
@@ -301,10 +290,6 @@ int wldev_get_rssi(
 		return error;
 
 	*prssi = dtoh32(scb_val.val);
-	/* when the return value is zero. skip overrinding code */
-	if (*prssi > WL_IW_RSSI_INVALID)
-		*prssi = WL_IW_RSSI_MAXVAL;
-
 	return error;
 }
 
@@ -380,7 +365,7 @@ int wldev_set_country(
 		return error;
 	}
 	dhd_bus_country_set(dev, &cspec);
-	WLDEV_INFO(("%s: set country for %s as %s rev %d\n",
+	WLDEV_ERROR(("%s: set country for %s as %s rev %d\n",
 		__FUNCTION__, country_code, cspec.ccode, cspec.rev));
 	return 0;
 }
