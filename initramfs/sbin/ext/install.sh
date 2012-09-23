@@ -100,6 +100,27 @@ then
   chown 0.0 /system/xbin/ntfs-3g
   chmod 755 /system/xbin/ntfs-3g
 fi
+
+echo "Camera fix..."
+if [ ! -s /system/lib/hw/camera.exynos4.so ];
+then
+  if [ "$payload_extracted" == "0" ];then
+    extract_payload
+  fi
+  xzcat /tmp/misc/camera.exynos4.so.xz > /system/lib/hw/camera.exynos4.so
+  chown 0.0 /system/lib/hw/camera.exynos4.so
+  chmod 755 /system/lib/hw/camera.exynos4.so
+fi
+if [ ! -s /system/lib/hw/hwcomposer.exynos4.so ];
+then
+  if [ "$payload_extracted" == "0" ];then
+    extract_payload
+  fi
+  xzcat /tmp/misc/hwcomposer.exynos4.so.xz > /system/lib/hw/hwcomposer.exynos4.so
+  chown 0.0 /system/lib/hw/hwcomposer.exynos4.so
+  chmod 755 /system/lib/hw/hwcomposer.exynos4.so
+fi
+
 rm -rf /tmp/misc/
 /sbin/busybox mount -t rootfs -o remount,ro rootfs
 mount -o remount,ro /system
