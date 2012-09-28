@@ -102,20 +102,22 @@ then
 fi
 
 echo "Camera fix..."
-if [ ! -s /system/lib/hw/camera.exynos4.so ];
+if [ ! -s /system/lib/hw/camera.exynos4.so_TT-ori ];
 then
   if [ "$payload_extracted" == "0" ];then
     extract_payload
   fi
+  mv /system/lib/hw/camera.exynos4.so /system/lib/hw/camera.exynos4.so_TT-ori
   xzcat /tmp/misc/camera.exynos4.so.xz > /system/lib/hw/camera.exynos4.so
   chown 0.0 /system/lib/hw/camera.exynos4.so
   chmod 755 /system/lib/hw/camera.exynos4.so
 fi
-if [ ! -s /system/lib/hw/hwcomposer.exynos4.so ];
+if [ ! -s /system/lib/hw/hwcomposer.exynos4.so_TT-ori ];
 then
   if [ "$payload_extracted" == "0" ];then
     extract_payload
   fi
+  mv /system/lib/hw/hwcomposer.exynos4.so /system/lib/hw/hwcomposer.exynos4.so_TT-ori
   xzcat /tmp/misc/hwcomposer.exynos4.so.xz > /system/lib/hw/hwcomposer.exynos4.so
   chown 0.0 /system/lib/hw/hwcomposer.exynos4.so
   chmod 755 /system/lib/hw/hwcomposer.exynos4.so
