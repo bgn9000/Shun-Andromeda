@@ -93,7 +93,10 @@ sleep 30
 ) &
 
 # apply ExTweaks defaults
+{
+sleep 30
 /res/uci.sh apply
+}&
 
 ##### init scripts #####
 (
