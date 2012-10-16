@@ -28,6 +28,11 @@
 #include <mach/cpufreq.h>
 #include <linux/input/mt.h>
 
+#ifdef CONFIG_TOUCHSCREEN_GESTURES
+#include <linux/spinlock.h>
+#include <linux/miscdevice.h>
+#endif
+
 #define OBJECT_TABLE_START_ADDRESS	7
 #define OBJECT_TABLE_ELEMENT_SIZE	6
 
@@ -92,6 +97,7 @@
 #define MAX_USING_FINGER_NUM 10
 
 #define MXT224_AUTOCAL_WAIT_TIME		2000
+#define printk(arg, ...)
 
 #if defined(U1_EUR_TARGET)
 static bool gbfilter;
@@ -199,8 +205,45 @@ struct mxt224_data {
 	bool enabled;
 };
 
+#ifdef CONFIG_TOUCHSCREEN_GESTURES
+
+#define MAX_GESTURES 30
+#define MAX_GESTURE_FINGERS 5
+#define MAX_GESTURE_STEPS 10
+
+// Definitions
+struct gesture_point {
+	int min_x;
+	int min_y;
+	int max_x;
+	int max_y;
+};
+
+typedef struct gesture_point gesture_points_t[MAX_GESTURES][MAX_GESTURE_FINGERS][MAX_GESTURE_STEPS];
+static gesture_points_t gesture_points = { { { { 0, 0, 0, 0 } } } };
+
+typedef int gestures_step_count_t[MAX_GESTURES][MAX_GESTURE_FINGERS];
+static gestures_step_count_t gestures_step_count = { { 0 } };
+
+// Track state
+static bool gestures_detected[MAX_GESTURES] = { false };
+static bool has_gestures = false;
+
+struct gesture_finger {
+	int finger_order;
+	int current_step;
+};
+static struct gesture_finger gesture_fingers[MAX_GESTURES][MAX_GESTURE_FINGERS] = { { { -1, -1 } } };
+
+DECLARE_WAIT_QUEUE_HEAD(gestures_wq);
+static spinlock_t gestures_lock;
+#endif
+
+static u8 mov_hysti = 255;
+
 #define CLEAR_MEDIAN_FILTER_ERROR
 struct mxt224_data *copy_data;
+struct mxt224_platform_data *copy_pdata;
 int touch_is_pressed;
 EXPORT_SYMBOL(touch_is_pressed);
 
@@ -446,27 +489,27 @@ static void mxt224_ta_probe(bool ta_status)
 	}
 
 	if (ta_status) {
-		copy_data->threshold = copy_data->tchthr_charging;
-		calcfg_dis = copy_data->calcfg_charging_e;
-		calcfg_en = copy_data->calcfg_charging_e | 0x20;
-		noise_threshold = copy_data->noisethr_charging;
-		movfilter = copy_data->movfilter_charging;
-		charge_time = copy_data->chrgtime_charging_e;
+		copy_data->threshold = copy_pdata->tchthr_charging;
+		calcfg_dis = copy_pdata->calcfg_charging_e;
+		calcfg_en = copy_pdata->calcfg_charging_e | 0x20;
+		noise_threshold = copy_pdata->noisethr_charging;
+		movfilter = copy_pdata->movfilter_charging;
+		charge_time = copy_pdata->chrgtime_charging_e;
 #ifdef CLEAR_MEDIAN_FILTER_ERROR
 		copy_data->gErrCondition = ERR_RTN_CONDITION_MAX;
 		copy_data->noise_median.mferr_setting = false;
 #endif
 	} else {
 		if (copy_data->boot_or_resume == 1)
-			copy_data->threshold = copy_data->tchthr_batt_init;
+			copy_data->threshold = copy_pdata->tchthr_batt_init;
 		else
-			copy_data->threshold = copy_data->tchthr_batt;
-		copy_data->threshold_e = copy_data->tchthr_batt_e;
-		calcfg_dis = copy_data->calcfg_batt_e;
-		calcfg_en = copy_data->calcfg_batt_e | 0x20;
-		noise_threshold = copy_data->noisethr_batt;
-		movfilter = copy_data->movfilter_batt;
-		charge_time = copy_data->chrgtime_batt_e;
+			copy_data->threshold = copy_pdata->tchthr_batt;
+		copy_data->threshold_e = copy_pdata->tchthr_batt_e;
+		calcfg_dis = copy_pdata->calcfg_batt_e;
+		calcfg_en = copy_pdata->calcfg_batt_e | 0x20;
+		noise_threshold = copy_pdata->noisethr_batt;
+		movfilter = copy_pdata->movfilter_batt;
+		charge_time = copy_pdata->chrgtime_batt_e;
 #ifdef CLEAR_MEDIAN_FILTER_ERROR
 		copy_data->gErrCondition = ERR_RTN_CONDITION_IDLE;
 		copy_data->noise_median.mferr_count = 0;
@@ -496,7 +539,7 @@ static void mxt224_ta_probe(bool ta_status)
 				  obj_address + (u16) register_address,
 				  size_one, &value);
 			/*move Filter */
-			value = copy_data->movfilter_batt_e;
+			value = copy_pdata->movfilter_batt_e;
 			register_address = 13;
 			write_mem(copy_data,
 				  obj_address + (u16) register_address,
@@ -526,6 +569,7 @@ static void mxt224_ta_probe(bool ta_status)
 		ret =
 		    get_object_info(copy_data, PROCG_NOISESUPPRESSION_T48,
 				    &size_one, &obj_address);
+#ifndef CONFIG_TARGET_LOCALE_NAATT_TEMP
 		value = calcfg_dis;
 		register_address = 2;
 		size_one = 1;
@@ -535,16 +579,16 @@ static void mxt224_ta_probe(bool ta_status)
 			 (u8) size_one, &val);
 		printk(KERN_ERR "[TSP]TA_probe MXT224E T%d Byte%d is %d\n", 48,
 		       register_address, val);
-
+#endif
 		if (ta_status)
 			write_config(copy_data, PROCG_NOISESUPPRESSION_T48,
 				     copy_data->noise_suppression_cfg_ta);
 		else
 			write_config(copy_data, PROCG_NOISESUPPRESSION_T48,
 				     copy_data->noise_suppression_cfg);
-#if defined(CONFIG_TARGET_LOCALE_NAATT)
+#if defined(CONFIG_TARGET_LOCALE_NAATT_TEMP)
 		if ((ta_status) && (copy_data->gain_change_flag == 1)) {
-			value = copy_data->gain_ta;
+			value = copy_data->blen_charging_e;
 			write_mem(copy_data, obj_address + 34, size_one,
 				  &value);
 			read_mem(copy_data, obj_address + 34, (u8) size_one,
@@ -587,6 +631,7 @@ static void mxt224_ta_probe(bool ta_status)
 				 &val);
 		}
 #endif
+#ifndef CONFIG_TARGET_LOCALE_NAATT_TEMP
 		value = calcfg_en;
 		write_mem(copy_data, obj_address + (u16) register_address,
 			  size_one, &value);
@@ -594,6 +639,7 @@ static void mxt224_ta_probe(bool ta_status)
 			 (u8) size_one, &val);
 		printk(KERN_ERR "[TSP]TA_probe MXT224E T%d Byte%d is %d\n", 48,
 		       register_address, val);
+#endif
 	} else {
 		if (copy_data->freq_table.fherr_setting >= 1) {
 			ret = get_object_info(copy_data, GEN_POWERCONFIG_T7,
@@ -645,6 +691,15 @@ static void mxt224_ta_probe(bool ta_status)
 		register_address = 13;
 		write_mem(copy_data, obj_address + (u16) register_address,
 			  size_one, &value);
+		
+		// if 255, it's not modified. by tegrak
+		if (mov_hysti != 255) {
+			value = (u8)mov_hysti;
+			register_address = 11;
+			write_mem(copy_data, obj_address+(u16)register_address, size_one, &value);
+			read_mem(copy_data, obj_address+(u16)register_address, (u8)size_one, &val);
+			printk(KERN_ERR "[TSP] TA_probe MXT224 T%d Byte%d is %d\n", 9, register_address, val);
+		}
 
 		value = noise_threshold;
 		register_address = 8;
@@ -1209,6 +1264,8 @@ static int __devinit mxt224_init_touch_driver(struct mxt224_data *data)
 	return ret;
 }
 
+void (*mxt224_touch_cb)(void) = NULL;
+
 static void report_input_data(struct mxt224_data *data)
 {
 	int i;
@@ -1218,6 +1275,14 @@ static void report_input_data(struct mxt224_data *data)
 	u16 object_address = 0;
 	u16 size = 1;
 	u8 value;
+#ifdef CONFIG_TOUCHSCREEN_GESTURES
+	int gesture_no, finger_no;
+	int finger_pos;
+	struct gesture_point *point;
+	int step;
+	bool fingers_completed;
+	unsigned long flags;
+#endif
 
 	touch_is_pressed = 0;
 
@@ -1230,6 +1295,30 @@ static void report_input_data(struct mxt224_data *data)
 
 		/* for release */
 		if (data->fingers[i].z == TSP_STATE_RELEASE) {
+#ifdef CONFIG_TOUCHSCREEN_GESTURES
+			// When a finger is released and its movement was not completed yet, reset it
+			spin_lock_irqsave(&gestures_lock, flags);
+			for (gesture_no = 0; gesture_no < MAX_GESTURES; gesture_no++) {
+				if (gestures_detected[gesture_no])
+					// Ignore gestures already reported
+					continue;
+
+				for (finger_no = 0; finger_no < MAX_GESTURE_FINGERS; finger_no++) {
+					if (gesture_fingers[gesture_no][finger_no].finger_order == i) {
+						// Found a match for ongoing movement
+						// Reset the finger progress if path not completed
+						if (gesture_fingers[gesture_no][finger_no].current_step <
+						    gestures_step_count[gesture_no][finger_no]) {
+							gesture_fingers[gesture_no][finger_no].finger_order = -1;
+							gesture_fingers[gesture_no][finger_no].current_step = -1;
+						}
+						break;
+					}
+				}
+			}
+			spin_unlock_irqrestore(&gestures_lock, flags);
+#endif
+
 			input_mt_slot(data->input_dev, i);
 			input_mt_report_slot_state(data->input_dev,
 				MT_TOOL_FINGER, false);
@@ -1243,6 +1332,71 @@ static void report_input_data(struct mxt224_data *data)
 #endif
 			continue;
 		}
+
+#ifdef CONFIG_TOUCHSCREEN_GESTURES
+		// Finger being moved, check the gesture steps progress
+		spin_lock_irqsave(&gestures_lock, flags);
+		for (gesture_no = 0; gesture_no < MAX_GESTURES; gesture_no++) {
+			if (gestures_detected[gesture_no])
+				// Ignore further movement for gestures already reported
+				continue;
+
+			// Find which finger definition this touch maps to
+			finger_pos = -1;
+			for (finger_no = 0; finger_no < MAX_GESTURE_FINGERS; finger_no++) {
+				if (gesture_fingers[gesture_no][finger_no].finger_order == i) {
+					// Found a match for ongoing movement
+					finger_pos = finger_no;
+					break;
+				}
+			}
+			if (finger_pos < 0) {
+				// This finger is not yet tracked, check the first zone it matches
+				for (finger_no = 0; finger_no < MAX_GESTURE_FINGERS; finger_no++) {
+					if (gestures_step_count[gesture_no][finger_no] < 1) {
+						// This finger definition has no steps, no more to check
+						break;
+					} else {
+						point = &gesture_points[gesture_no][finger_no][0];
+						if (gesture_fingers[gesture_no][finger_no].finger_order < 0 &&
+						    data->fingers[i].x >= point->min_x &&
+						    data->fingers[i].x <= point->max_x &&
+						    data->fingers[i].y >= point->min_y &&
+						    data->fingers[i].y <= point->max_y) {
+							// This finger definition is still pending
+							// and this touch matches the area
+							finger_pos = finger_no;
+							gesture_fingers[gesture_no][finger_pos].finger_order = i;
+							gesture_fingers[gesture_no][finger_pos].current_step = 1;
+							printk("[TSP] Gesture %d, finger %d - Associated index %d\n",
+							       gesture_no, finger_pos, i);
+							break;
+						}
+					}
+				}
+			}
+			if (finger_pos >= 0) {
+				// Track next zones where the finger should move
+				for (step = gesture_fingers[gesture_no][finger_pos].current_step;
+				     step < gestures_step_count[gesture_no][finger_pos];
+				     step++) {
+					point = &gesture_points[gesture_no][finger_pos][step];
+					if (data->fingers[i].x >= point->min_x &&
+					    data->fingers[i].x <= point->max_x &&
+					    data->fingers[i].y >= point->min_y &&
+					    data->fingers[i].y <= point->max_y) {
+						// Next zone reached, keep testing
+						printk("[TSP] Gesture %d, finger %d - Moved through step, next is %d\n",
+						       gesture_no, finger_pos, step+1);
+						gesture_fingers[gesture_no][finger_pos].current_step++;
+					} else {
+						break;
+					}
+				}
+			}
+		}
+		spin_unlock_irqrestore(&gestures_lock, flags);
+#endif
 
 		input_mt_slot(data->input_dev, i);
 		input_mt_report_slot_state(data->input_dev,
@@ -1324,6 +1478,44 @@ static void report_input_data(struct mxt224_data *data)
 		}
 	}
 
+#ifdef CONFIG_TOUCHSCREEN_GESTURES
+	// Check completed gestures or reset all progress if all fingers released
+	spin_lock_irqsave(&gestures_lock, flags);
+	for (gesture_no = 0; gesture_no < MAX_GESTURES; gesture_no++) {
+		if (gestures_detected[gesture_no])
+			// Gesture already reported, skip
+			continue;
+
+		if (gestures_step_count[gesture_no][0] < 1)
+			continue; // Gesture not configured
+
+		fingers_completed = true;
+		for (finger_no = 0; finger_no < MAX_GESTURE_FINGERS; finger_no++) {
+			if (gestures_step_count[gesture_no][finger_no] > 0 &&
+			    gesture_fingers[gesture_no][finger_no].current_step <
+			        gestures_step_count[gesture_no][finger_no]) {
+
+				fingers_completed = false;
+				break;
+			}
+		}
+		if (fingers_completed) {
+			// All finger steps completed for this gesture, wake any consumers
+			printk("[TSP] Gesture %d completed, waking consumers\n", gesture_no);
+			gestures_detected[gesture_no] = true;
+			has_gestures = true;
+			wake_up_interruptible_all(&gestures_wq);
+		} else if (!tsp_state) {
+			// All fingers released, reset progress for all paths
+			for (finger_no = 0; finger_no < MAX_GESTURE_FINGERS; finger_no++) {
+				gesture_fingers[gesture_no][finger_no].finger_order = -1;
+				gesture_fingers[gesture_no][finger_no].current_step = -1;
+			}
+		}
+	}
+	spin_unlock_irqrestore(&gestures_lock, flags);
+#endif
+
 	if (!tsp_state && copy_data->lock_status) {
 		exynos_cpufreq_lock_free(DVFS_LOCK_ID_TSP);
 		copy_data->lock_status = 0;
@@ -1334,6 +1526,8 @@ static void report_input_data(struct mxt224_data *data)
 				level);
 			copy_data->lock_status = 1;
 		}
+		if(touch_is_pressed && mxt224_touch_cb!=NULL)
+			(*mxt224_touch_cb)();
 	}
 }
 
@@ -1495,12 +1689,52 @@ static void median_err_setting(void)
 	bool ta_status_check;
 	int ret = 0;
 
+	if (cal_check_flag == 1) {
+		printk(KERN_ERR"[TSP] calibration was forcely good\n");
+		cal_check_flag = 0;
+		good_check_flag = 0;
+		qt_timer_state = 0;
+		qt_time_point = jiffies_to_msecs(jiffies);
+		copy_data->palm_chk_flag = 2;
+
+		ret = get_object_info(copy_data,
+			GEN_ACQUISITIONCONFIG_T8,
+			&size_one, &obj_address);
+		write_mem(copy_data,
+		  obj_address + 6, 1,
+		  &copy_data->atchcalst_e);
+		write_mem(copy_data,
+		  obj_address + 7, 1,
+		  &copy_data->atchcalsthr_e);
+		write_mem(copy_data,
+		  obj_address + 8, 1,
+		  &copy_data->atchfrccalthr_e);
+		write_mem(copy_data,
+		  obj_address + 9, 1,
+		  &copy_data->atchfrccalratio_e);
+	}
+
 	copy_data->read_ta_status(&ta_status_check);
 	if (!ta_status_check) {
 		copy_data->gErrCondition = Check_Err_Condition();
 		switch (copy_data->gErrCondition) {
 		case ERR_RTN_CONDITION_T9:
 			{
+#ifdef CONFIG_TARGET_LOCALE_NAATT_TEMP
+				ret =
+				get_object_info(copy_data,
+				PROCG_NOISESUPPRESSION_T48,
+				&size_one, &obj_address);
+				value = 100;
+				write_mem(copy_data, obj_address+22, 1,
+				&value);
+				value = 100;
+				write_mem(copy_data, obj_address+25, 1,
+				&value);
+				value = 81;
+				write_mem(copy_data, obj_address+39, 1,
+				&value);
+#else
 				ret =
 				    get_object_info(copy_data,
 						    TOUCH_MULTITOUCHSCREEN_T9,
@@ -1555,6 +1789,7 @@ static void median_err_setting(void)
 				value = 80;
 				write_mem(copy_data, obj_address + 39, 1,
 					  &value);
+#endif
 			}
 			break;
 
@@ -1913,6 +2148,40 @@ static int mxt224_internal_resume(struct mxt224_data *data)
 	return ret;
 }
 
+#ifdef CONFIG_TOUCHSCREEN_GESTURES
+// Must be called with the gestures_lock spinlock held
+static void reset_gestures_detection_locked(bool including_detected)
+{
+	int gesture_no, finger_no;
+
+	for (gesture_no = 0; gesture_no < MAX_GESTURES; gesture_no++) {
+		if (gestures_detected[gesture_no] && !including_detected)
+			// Gesture already reported, skip
+			continue;
+
+		gestures_detected[gesture_no] = false;
+
+		if (gestures_step_count[gesture_no][0] < 1)
+			continue; // Gesture not configured
+
+		// Reset progress for all paths of this gesture
+		for (finger_no = 0; finger_no < MAX_GESTURE_FINGERS; finger_no++) {
+			gesture_fingers[gesture_no][finger_no].finger_order = -1;
+			gesture_fingers[gesture_no][finger_no].current_step = -1;
+		}
+	}
+}
+
+static void reset_gestures_detection(bool including_detected)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&gestures_lock, flags);
+	reset_gestures_detection_locked(including_detected);
+	spin_unlock_irqrestore(&gestures_lock, flags);
+}
+#endif
+
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #define mxt224_suspend	NULL
 #define mxt224_resume	NULL
@@ -1921,6 +2190,10 @@ static void mxt224_early_suspend(struct early_suspend *h)
 {
 	struct mxt224_data *data = container_of(h, struct mxt224_data,
 						early_suspend);
+
+#ifdef CONFIG_TOUCHSCREEN_GESTURES
+	reset_gestures_detection(false);
+#endif
 
 	copy_data->mxt224_enabled = 0;
 	touch_is_pressed = 0;
@@ -1964,6 +2237,10 @@ static int mxt224_suspend(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct mxt224_data *data = i2c_get_clientdata(client);
+
+#ifdef CONFIG_TOUCHSCREEN_GESTURES
+	reset_gestures_detection(false);
+#endif
 
 	copy_data->mxt224_enabled = 0;
 	touch_is_pressed = 0;
@@ -2045,6 +2322,76 @@ static ssize_t qt602240_object_setting(struct device *dev,
 
 	return count;
 
+}
+
+/* 
+ * write MOVHYSTI of TOUCH_MULTITOUCHSCREEN_T9
+ * by tegrak, found by vitalij@XDA
+ */
+static ssize_t mov_hysti_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	unsigned int register_value;
+	u8 **tsp_config;
+	char buff[50];
+	int i;
+	
+	//struct i2c_client *client = to_i2c_client(dev);
+//	struct mxt224_data *data = dev_get_drvdata(dev);
+	//struct mxt224_platform_data *pdata = data->client->dev.platform_data;
+	
+	sscanf(buf, "%u", &register_value);
+	
+	// store value in global variable
+	mov_hysti = register_value;
+	
+	/*
+	tsp_config = pdata->config;
+	for (i = 0; tsp_config[i][0] != RESERVED_T255; i++) {
+		if (tsp_config[i][0] == TOUCH_MULTITOUCHSCREEN_T9) {
+			printk(KERN_ERR "[TSP] T9[12]=%u\n", tsp_config[i][12]);
+			tsp_config[i][12] = (u8)register_value;
+			break;
+		}
+	}
+	*/
+	
+	//do not apply if the screen is not active,
+	//it will be applied after turning on the screen anyway -gm
+	if( copy_data->mxt224_enabled == 1)
+	{
+		i = sprintf(buff, "%u %u %u", TOUCH_MULTITOUCHSCREEN_T9, 11, register_value);
+		qt602240_object_setting(dev, attr, buff, i);
+	}
+	return count;
+}
+
+/* 
+ * read MOVHYSTI of TOUCH_MULTITOUCHSCREEN_T9
+ * by tegrak, found by vitalij@XDA
+ */
+ 
+static ssize_t mov_hysti_show(struct device* dev, 
+							 struct device_attribute *attr,
+							 char *buf)
+{
+	struct mxt224_data *data = dev_get_drvdata(dev);
+	unsigned int object_type = TOUCH_MULTITOUCHSCREEN_T9;
+	u8 val;
+	int ret;
+	u16 address;
+	u16 size;
+	
+	ret = get_object_info(data, (u8)object_type, &size, &address);
+	if (ret || size <= 11) {
+		printk(KERN_ERR "[TSP] fail to get object_info\n");
+//		sprintf(buf, "-1\n");
+		return -EINVAL;
+	}
+	
+	read_mem(data, address+11, 1, &val);
+	return sprintf(buf, "%u\n", val);
 }
 
 static ssize_t qt602240_object_show(struct device *dev,
@@ -2383,7 +2730,7 @@ static void mxt224_optical_gain(uint16_t dbg_mode)
 			    ((uint16_t) data_buffer[1] << 8) +
 			    (uint16_t) data_buffer[0];
 
-#if defined(CONFIG_TARGET_LOCALE_NAATT)
+#if defined(CONFIG_TARGET_LOCALE_NAATT_TEMP)
 			if (copy_data->family_id == 0x81) {
 				if (qt_refrence != 0)
 					qt_refrence = qt_refrence - 16384;
@@ -2411,7 +2758,7 @@ static void mxt224_optical_gain(uint16_t dbg_mode)
 		msleep(20);
 	}
 
-#if defined(CONFIG_TARGET_LOCALE_NAATT)
+#if defined(CONFIG_TARGET_LOCALE_NAATT_TEMP)
 	if (reference_over)
 		copy_data->gain_ta = 0;
 #else
@@ -2946,8 +3293,8 @@ static ssize_t tsp_threshold_store(struct device *dev,
 		printk(KERN_ERR "[TSP] threshold value %d\n",
 			threshold);
 		ret =
-			get_object_info(copy_data, TOUCH_MULTITOUCHSCREEN_T9,
-					&size_one, &address);
+		    get_object_info(copy_data, TOUCH_MULTITOUCHSCREEN_T9,
+				    &size_one, &address);
 		size_one = 1;
 		value = (u8) threshold;
 		write_mem(copy_data, address + (u16) object_register, size_one,
@@ -2956,7 +3303,7 @@ static ssize_t tsp_threshold_store(struct device *dev,
 			 (u8) size_one, &val);
 
 		printk(KERN_ERR "[TSP] T%d Byte%d is %d\n",
-			   TOUCH_MULTITOUCHSCREEN_T9, object_register, val);
+		       TOUCH_MULTITOUCHSCREEN_T9, object_register, val);
 	}
 
 	return size;
@@ -3168,6 +3515,8 @@ static DEVICE_ATTR(object_write, S_IRUGO | S_IWUSR | S_IWGRP, NULL,
 		   qt602240_object_setting);
 static DEVICE_ATTR(dbg_switch, S_IRUGO | S_IWUSR | S_IWGRP, NULL,
 		   mxt224_debug_setting);
+static DEVICE_ATTR(mov_hysti, S_IRUGO | S_IWUSR | S_IWGRP, 
+		mov_hysti_show, mov_hysti_store);
 
 static int sec_touchscreen_enable(struct mxt224_data *data)
 {
@@ -3233,12 +3582,242 @@ static struct attribute *qt602240_attrs[] = {
 	&dev_attr_object_show.attr,
 	&dev_attr_object_write.attr,
 	&dev_attr_dbg_switch.attr,
+	&dev_attr_mov_hysti.attr,
 	NULL
 };
 
 static const struct attribute_group qt602240_attr_group = {
 	.attrs = qt602240_attrs,
 };
+
+#ifdef CONFIG_TOUCHSCREEN_GESTURES
+static ssize_t gesture_patterns_show(struct device *dev,
+                                     struct device_attribute *attr, char *buf)
+{
+	char *s;
+	int gesture_no, finger_no, step;
+	struct gesture_point *point;
+
+	s = buf;
+	s += sprintf(s, "# Touch gestures\n#\n");
+	s += sprintf(s, "# Syntax\n");
+	s += sprintf(s, "#   <gesture_no>:<finger_no>:(x_min|x_max,y_min|y_max)\n");
+	s += sprintf(s, "#   ...\n");
+	s += sprintf(s, "#   gesture_no: 1 to %d\n", MAX_GESTURES);
+	s += sprintf(s, "#   finger_no : 1 to %d\n", MAX_GESTURE_FINGERS);
+	s += sprintf(s, "#   max steps per gesture and finger: %d\n\n", MAX_GESTURE_STEPS);
+
+	// No special need for thread safety, at worst there might be incoherent definitions output
+	for (gesture_no = 0; gesture_no < MAX_GESTURES; gesture_no++) {
+		if (gestures_step_count[gesture_no][0] < 1)
+			continue; // Gesture not configured
+		s += sprintf(s, "# Gesture %d:\n", gesture_no+1);
+		for (finger_no = 0; finger_no < MAX_GESTURE_FINGERS; finger_no++) {
+			for (step = 0; step < gestures_step_count[gesture_no][finger_no]; step++) {
+				point = &gesture_points[gesture_no][finger_no][step];
+				s += sprintf(s, "%d:%d:(%d|%d,%d|%d)\n", gesture_no+1, finger_no+1,
+				             point->min_x, point->max_x,
+				             point->min_y, point->max_y);
+			}
+		}
+	}
+	return strlen(buf);
+}
+
+static ssize_t gesture_patterns_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t size)
+{
+	gesture_points_t *tmp_gesture_points;
+	gestures_step_count_t *tmp_gestures_step_count;
+	unsigned long flags;
+	int res;
+	int gesture_no, finger_no, min_x, max_x, min_y, max_y;
+	struct gesture_point *point;
+	int step;
+
+	tmp_gesture_points = kmalloc(sizeof(*tmp_gesture_points), GFP_KERNEL);
+	if (!tmp_gesture_points)
+		return -ENOMEM;
+	tmp_gestures_step_count = kmalloc(sizeof(*tmp_gestures_step_count), GFP_KERNEL);
+	if (!tmp_gestures_step_count) {
+		kfree(tmp_gesture_points);
+		return -ENOMEM;
+	}
+	for (gesture_no = 0; gesture_no < MAX_GESTURES; gesture_no++) {
+		for (finger_no = 0; finger_no < MAX_GESTURE_FINGERS; finger_no++) {
+			for (step = 0; step < MAX_GESTURE_STEPS; step++) {
+				point = &(*tmp_gesture_points)[gesture_no][finger_no][step];
+				point->min_x = 0;
+				point->max_x = 0;
+				point->min_y = 0;
+				point->max_y = 0;
+			}
+			(*tmp_gestures_step_count)[gesture_no][finger_no] = 0;
+		}
+	}
+
+	for (;;) {
+		// Skip all whitespace and comment lines
+		for (;;) {
+			while (*buf == ' ' || *buf == '\t' || *buf == '\r' || *buf == '\n')
+				buf++;
+
+			if (*buf == '\0') {
+				// EOF
+				goto finalize;
+			} else if (*buf == '#') {
+				// Comment line
+				buf = strstr(buf, "\n");
+				if (!buf)
+					goto finalize; // No more data
+			} else {
+				break;
+			}
+		}
+
+		res = sscanf(buf, "%d:%d:(%d|%d,%d|%d)", &gesture_no, &finger_no, &min_x, &max_x, &min_y, &max_y);
+		if (res != 6) {
+			printk("[TSP] Only %d gesture tokens read from buffer: %s\n", res, buf);
+			kfree(tmp_gestures_step_count);
+			kfree(tmp_gesture_points);
+			return -EINVAL; // Invalid line format
+		}
+
+		// Validate args boundary
+		if (gesture_no <= 0 || gesture_no > MAX_GESTURES) {
+			kfree(tmp_gestures_step_count);
+			kfree(tmp_gesture_points);
+			return -ENOMEM; // Too many gestures
+		}
+		gesture_no--;
+		if (finger_no <= 0 || finger_no > MAX_GESTURE_FINGERS) {
+			kfree(tmp_gestures_step_count);
+			kfree(tmp_gesture_points);
+			return -ENOMEM; // Too many fingers
+		}
+		finger_no--;
+		if ((*tmp_gestures_step_count)[gesture_no][finger_no] >= MAX_GESTURE_STEPS) {
+			kfree(tmp_gestures_step_count);
+			kfree(tmp_gesture_points);
+			return -ENOMEM; // Too many steps
+		}
+
+		step = (*tmp_gestures_step_count)[gesture_no][finger_no]++;
+		point = &(*tmp_gesture_points)[gesture_no][finger_no][step];
+		point->min_x = min_x;
+		point->max_x = max_x;
+		point->min_y = min_y;
+		point->max_y = max_y;
+		buf = strstr(buf, ")");
+		if (!buf)
+			goto finalize; // No more data
+		else
+			buf++;
+
+		// Continue to next input contents
+	}
+
+finalize:
+	spin_lock_irqsave(&gestures_lock, flags);
+	reset_gestures_detection_locked(true);
+	memcpy(&gesture_points, tmp_gesture_points, sizeof(*tmp_gesture_points));
+	memcpy(&gestures_step_count, tmp_gestures_step_count, sizeof(*tmp_gestures_step_count));
+	spin_unlock_irqrestore(&gestures_lock, flags);
+
+	kfree(tmp_gestures_step_count);
+	kfree(tmp_gesture_points);
+	return size;
+}
+
+static ssize_t wait_for_gesture_show(struct device *dev,
+                                     struct device_attribute *attr, char *buf)
+{
+	int ret;
+	int gesture_no, finger_no;
+	char *s;
+	int detected_gesture;
+	bool has_more_gestures;
+	unsigned long flags;
+
+	// Does not stop if there's a gesture already reported
+	ret = wait_event_interruptible(gestures_wq,
+                                       has_gestures);
+        if (ret)
+		return ret; // Interrupted
+
+	s = buf;
+	spin_lock_irqsave(&gestures_lock, flags);
+	for (gesture_no = 0; gesture_no < MAX_GESTURES; gesture_no++) {
+		if (gestures_detected[gesture_no]) {
+			detected_gesture = gesture_no;
+
+			has_more_gestures = false;
+			while (++gesture_no < MAX_GESTURES) {
+				if (gestures_detected[gesture_no]) {
+					has_more_gestures = true;
+					break;
+				}
+			}
+			// In most cases, additional waiting clients will not have run yet and will
+			// keep waiting if this goes back to false
+			has_gestures = has_more_gestures;
+
+			// Reset detection of this gesture
+			for (finger_no = 0; finger_no < MAX_GESTURE_FINGERS; finger_no++) {
+				gesture_fingers[detected_gesture][finger_no].finger_order = -1;
+				gesture_fingers[detected_gesture][finger_no].current_step = -1;
+			}
+			gestures_detected[detected_gesture] = false;
+
+			spin_unlock_irqrestore(&gestures_lock, flags);
+
+			s += sprintf(buf, "%d", detected_gesture + 1);
+			return s - buf;
+		}
+	}
+	spin_unlock_irqrestore(&gestures_lock, flags);
+
+	// Despite waking up, no gestures were detected
+	s += sprintf(buf, "0");
+	return s - buf;
+}
+
+static ssize_t wait_for_gesture_store(struct device *dev,
+                                      struct device_attribute *attr,
+                                      const char *buf, size_t size)
+{
+	if (!strncmp(buf, "reset", 5)) {
+		// Clear any pending gestures and reset detection
+		reset_gestures_detection(true);
+		return size;
+
+	} else {
+		return -EINVAL;
+	}
+}
+
+static DEVICE_ATTR(gesture_patterns, S_IRUGO | S_IWUSR,
+                   gesture_patterns_show, gesture_patterns_store);
+static DEVICE_ATTR(wait_for_gesture, S_IRUGO | S_IWUSR,
+                   wait_for_gesture_show, wait_for_gesture_store);
+
+static struct attribute *gestures_attrs[] = {
+	&dev_attr_gesture_patterns.attr,
+	&dev_attr_wait_for_gesture.attr,
+	NULL
+};
+
+static const struct attribute_group gestures_attr_group = {
+	.attrs = gestures_attrs,
+};
+
+static struct miscdevice gestures_device = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name  = "touch_gestures",
+};
+static bool gestures_device_registered = false;
+#endif
 
 static int __devinit mxt224_probe(struct i2c_client *client,
 				  const struct i2c_device_id *id)
@@ -3254,7 +3833,7 @@ static int __devinit mxt224_probe(struct i2c_client *client,
 	u8 user_info_value;
 	u16 obj_address = 0;
 
-#if defined(CONFIG_TARGET_LOCALE_NAATT)
+#if defined(CONFIG_TARGET_LOCALE_NAATT_TEMP)
 	int gain_ta_pre;
 #endif
 
@@ -3272,6 +3851,10 @@ static int __devinit mxt224_probe(struct i2c_client *client,
 		       sizeof(*data->fingers), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
+
+#ifdef CONFIG_TOUCHSCREEN_GESTURES
+	spin_lock_init(&gestures_lock);
+#endif
 
 	data->num_fingers = pdata->max_finger_touches;
 	data->power_on = pdata->power_on;
@@ -3325,7 +3908,9 @@ static int __devinit mxt224_probe(struct i2c_client *client,
 	data->gpio_read_done = pdata->gpio_read_done;
 
 	data->power_on();
-
+#if defined(CONFIG_MACH_M0_GRANDECTC)
+	msleep(100);
+#endif
 	ret = mxt224_init_touch_driver(data);
 	if (ret) {
 		dev_err(&client->dev, "chip initialization failed\n");
@@ -3343,6 +3928,7 @@ static int __devinit mxt224_probe(struct i2c_client *client,
 	data->tsp_config_version = "20111215";
 
 	copy_data = data;
+	copy_pdata = pdata;
 
 	if (data->family_id == 0x80) {	/*MXT-224 */
 		tsp_config = pdata->config;
@@ -3364,8 +3950,8 @@ static int __devinit mxt224_probe(struct i2c_client *client,
 		data->atchcalsthr_e = pdata->atchcalsthr_e;
 		data->noise_suppression_cfg = pdata->t48_config_batt_e + 1;
 		data->noise_suppression_cfg_ta = pdata->t48_config_chrg_e + 1;
-		data->tchthr_batt_e= pdata->tchthr_batt_e;
-		data->tchthr_charging_e= pdata->tchthr_charging_e;
+		data->tchthr_batt_e = pdata->tchthr_batt_e;
+		data->tchthr_charging_e = pdata->tchthr_charging_e;
 		data->calcfg_batt_e = pdata->calcfg_batt_e;
 		data->calcfg_charging_e = pdata->calcfg_charging_e;
 		data->atchfrccalthr_e = pdata->atchfrccalthr_e;
@@ -3457,25 +4043,6 @@ static int __devinit mxt224_probe(struct i2c_client *client,
 	msleep(60);
 	copy_data->mxt224_enabled = 1;
 
-#if defined(CONFIG_TARGET_LOCALE_NAATT)
-	mxt224_ta_probe(1);
-	ret =
-	    get_object_info(data, PROCG_NOISESUPPRESSION_T48, &size_one,
-			    &obj_address);
-	read_mem(data, obj_address + 34, 1, &copy_data->gain_ta);
-	printk(KERN_DEBUG "[TSP]TA_probe MXT224E T%d Byte%d is %d\n", 48, 34,
-	       copy_data->gain_ta);
-	gain_ta_pre = copy_data->gain_ta;
-	mxt224_optical_gain(QT_REFERENCE_MODE);
-	if (gain_ta_pre != copy_data->gain_ta) {
-		printk(KERN_DEBUG
-			"[TSP] change gain value to %d for TA mode\n",
-		       copy_data->gain_ta);
-		copy_data->gain_change_flag = 1;
-	}
-	mxt224_ta_probe(0);
-#endif
-
 	if (data->read_ta_status) {
 		data->read_ta_status(&ta_status);
 		printk(KERN_ERR "[TSP] ta_status is %d", ta_status);
@@ -3541,6 +4108,20 @@ static int __devinit mxt224_probe(struct i2c_client *client,
 	ret = sysfs_create_group(&client->dev.kobj, &qt602240_attr_group);
 	if (ret)
 		printk(KERN_ERR "[TSP] sysfs_create_group()is falled\n");
+
+#ifdef CONFIG_TOUCHSCREEN_GESTURES
+	ret = misc_register(&gestures_device);
+	if (ret) {
+		printk(KERN_ERR "[TSP] gestures misc_register failed.\n");
+	} else {
+		if (sysfs_create_group(&gestures_device.this_device->kobj, &gestures_attr_group)) {
+			printk(KERN_ERR "[TSP] sysfs_create_group() has failed\n");
+			misc_deregister(&gestures_device);
+		} else {
+			gestures_device_registered = true;
+		}
+	}
+#endif
 
 #ifdef ENABLE_NOISE_TEST_MODE
 /*
@@ -3683,8 +4264,10 @@ static int __devinit mxt224_probe(struct i2c_client *client,
 #endif
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
-#if defined(CONFIG_TARGET_LOCALE_NA) || defined(CONFIG_TARGET_LOCALE_NAATT)
+#if defined(CONFIG_TARGET_LOCALE_NA) || defined(CONFIG_TARGET_LOCALE_NAATT_TEMP)
 	data->early_suspend.level = EARLY_SUSPEND_LEVEL_DISABLE_FB + 1;
+#elif defined(CONFIG_TARGET_LOCALE_KOR)
+	data->early_suspend.level = EARLY_SUSPEND_LEVEL_DISABLE_FB + 3;
 #else
 	data->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
 #endif
@@ -3757,6 +4340,13 @@ static int __init mxt224_init(void)
 
 static void __exit mxt224_exit(void)
 {
+#ifdef CONFIG_TOUCHSCREEN_GESTURES
+	if (gestures_device_registered) {
+		sysfs_remove_group(&gestures_device.this_device->kobj, &gestures_attr_group);
+		misc_deregister(&gestures_device);
+		gestures_device_registered = false;
+	}
+#endif
 	i2c_del_driver(&mxt224_i2c_driver);
 }
 

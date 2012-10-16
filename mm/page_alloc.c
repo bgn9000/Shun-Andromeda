@@ -78,6 +78,8 @@ DEFINE_PER_CPU(int, _numa_mem_);		/* Kernel "local memory" node */
 EXPORT_PER_CPU_SYMBOL(_numa_mem_);
 #endif
 
+struct rw_semaphore page_alloc_slow_rwsem;
+
 /*
  * Array of node states.
  */
@@ -98,6 +100,14 @@ unsigned long totalram_pages __read_mostly;
 unsigned long totalreserve_pages __read_mostly;
 int percpu_pagelist_fraction;
 gfp_t gfp_allowed_mask __read_mostly = GFP_BOOT_MASK;
+
+#ifdef CONFIG_COMPACTION_RETRY_DEBUG
+static inline void show_buddy_info(void);
+#else
+static inline void show_buddy_info(void)
+{
+}
+#endif
 
 #ifdef CONFIG_PM_SLEEP
 /*
@@ -1862,6 +1872,10 @@ __alloc_pages_may_oom(gfp_t gfp_mask, unsigned int order,
 	int migratetype)
 {
 	struct page *page;
+#ifdef CONFIG_COMPACTION_RETRY
+	struct zoneref *z;
+	struct zone *zone;
+#endif
 
 	/* Acquire the OOM killer lock for the zones in zonelist */
 	if (!try_set_zonelist_oom(zonelist, gfp_mask)) {
@@ -1880,6 +1894,32 @@ __alloc_pages_may_oom(gfp_t gfp_mask, unsigned int order,
 		preferred_zone, migratetype);
 	if (page)
 		goto out;
+
+#ifdef CONFIG_COMPACTION_RETRY
+	/*
+	 * When we reach here, we already tried direct reclaim.
+	 * Therefore it might be possible that we have enough
+	 * free memory but extremely fragmented.
+	 * So we give it a last chance to try memory compaction and get pages.
+	 */
+	if (order) {
+		pr_info("reclaim before oom : retry compaction.\n");
+		show_buddy_info();
+
+		for_each_zone_zonelist_nodemask(zone, z, zonelist,
+					high_zoneidx, nodemask)
+			compact_zone_order(zone, -1, gfp_mask, true);
+
+		show_buddy_info();
+		pr_info("reclaim :end\n");
+		page = get_page_from_freelist(gfp_mask|__GFP_HARDWALL,
+			nodemask, order, zonelist, high_zoneidx,
+			ALLOC_WMARK_HIGH|ALLOC_CPUSET,
+			preferred_zone, migratetype);
+		if (page)
+			goto out;
+	}
+#endif
 
 	if (!(gfp_mask & __GFP_NOFAIL)) {
 		/* The OOM killer will not help higher order allocs */
@@ -1912,13 +1952,19 @@ static struct page *
 __alloc_pages_direct_compact(gfp_t gfp_mask, unsigned int order,
 	struct zonelist *zonelist, enum zone_type high_zoneidx,
 	nodemask_t *nodemask, int alloc_flags, struct zone *preferred_zone,
-	int migratetype, unsigned long *did_some_progress,
-	bool sync_migration)
+	int migratetype, bool sync_migration,
+	bool *deferred_compaction,
+	unsigned long *did_some_progress)
 {
 	struct page *page;
 
-	if (!order || compaction_deferred(preferred_zone))
+	if (!order)
 		return NULL;
+
+	if (compaction_deferred(preferred_zone)) {
+		*deferred_compaction = true;
+		return NULL;
+	}
 
 	current->flags |= PF_MEMALLOC;
 	*did_some_progress = try_to_compact_pages(zonelist, order, gfp_mask,
@@ -1947,7 +1993,13 @@ __alloc_pages_direct_compact(gfp_t gfp_mask, unsigned int order,
 		 * but not enough to satisfy watermarks.
 		 */
 		count_vm_event(COMPACTFAIL);
-		defer_compaction(preferred_zone);
+
+		/*
+		 * As async compaction considers a subset of pageblocks, only
+		 * defer if the failure was a sync compaction failure.
+		 */
+		if (sync_migration)
+			defer_compaction(preferred_zone);
 
 		cond_resched();
 	}
@@ -1959,8 +2011,9 @@ static inline struct page *
 __alloc_pages_direct_compact(gfp_t gfp_mask, unsigned int order,
 	struct zonelist *zonelist, enum zone_type high_zoneidx,
 	nodemask_t *nodemask, int alloc_flags, struct zone *preferred_zone,
-	int migratetype, unsigned long *did_some_progress,
-	bool sync_migration)
+	int migratetype, bool sync_migration,
+	bool *deferred_compaction,
+	unsigned long *did_some_progress)
 {
 	return NULL;
 }
@@ -2113,6 +2166,8 @@ __alloc_pages_slowpath(gfp_t gfp_mask, unsigned int order,
 #ifdef CONFIG_ANDROID_WIP
 	unsigned long start_tick = jiffies;
 #endif
+	bool deferred_compaction = false;
+
 	/*
 	 * In the slowpath, we sanity check order to avoid ever trying to
 	 * reclaim >= MAX_ORDER areas which will never succeed. Callers may
@@ -2123,6 +2178,9 @@ __alloc_pages_slowpath(gfp_t gfp_mask, unsigned int order,
 		WARN_ON_ONCE(!(gfp_mask & __GFP_NOWARN));
 		return NULL;
 	}
+
+	if (gfp_mask & __GFP_WAIT)
+		down_read(&page_alloc_slow_rwsem);
 
 	/*
 	 * GFP_THISNODE (meaning __GFP_THISNODE, __GFP_NORETRY and
@@ -2192,11 +2250,21 @@ rebalance:
 					zonelist, high_zoneidx,
 					nodemask,
 					alloc_flags, preferred_zone,
-					migratetype, &did_some_progress,
-					sync_migration);
+					migratetype, sync_migration,
+					&deferred_compaction,
+					&did_some_progress);
 	if (page)
 		goto got_pg;
 	sync_migration = true;
+
+	/*
+	 * If compaction is deferred for high-order allocations, it is because
+	 * sync compaction recently failed. In this is the case and the caller
+	 * has requested the system not be heavily disrupted, fail the
+	 * allocation now instead of entering direct reclaim
+	 */
+	if (deferred_compaction && (gfp_mask & __GFP_NO_KSWAPD))
+		goto nopage;
 
 	/* Try direct reclaim and then allocating */
 	page = __alloc_pages_direct_reclaim(gfp_mask, order,
@@ -2221,6 +2289,11 @@ rebalance:
 		if ((gfp_mask & __GFP_FS) && !(gfp_mask & __GFP_NORETRY)) {
 			if (oom_killer_disabled)
 				goto nopage;
+#ifdef CONFIG_ANDROID_WIP
+			if (did_some_progress)
+				pr_info("time's up : calling "
+						"__alloc_pages_may_oom\n");
+#endif
 			page = __alloc_pages_may_oom(gfp_mask, order,
 					zonelist, high_zoneidx,
 					nodemask, preferred_zone,
@@ -2274,18 +2347,23 @@ rebalance:
 					zonelist, high_zoneidx,
 					nodemask,
 					alloc_flags, preferred_zone,
-					migratetype, &did_some_progress,
-					sync_migration);
+					migratetype, sync_migration,
+					&deferred_compaction,
+					&did_some_progress);
 		if (page)
 			goto got_pg;
 	}
 
 nopage:
 	warn_alloc_failed(gfp_mask, order, NULL);
+	if (gfp_mask & __GFP_WAIT)
+		up_read(&page_alloc_slow_rwsem);
 	return page;
 got_pg:
 	if (kmemcheck_enabled)
 		kmemcheck_pagealloc_alloc(page, order, gfp_mask);
+	if (gfp_mask & __GFP_WAIT)
+		up_read(&page_alloc_slow_rwsem);
 	return page;
 
 }
@@ -2299,8 +2377,9 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
 {
 	enum zone_type high_zoneidx = gfp_zone(gfp_mask);
 	struct zone *preferred_zone;
-	struct page *page;
+	struct page *page = NULL;
 	int migratetype = allocflags_to_migratetype(gfp_mask);
+	unsigned int cpuset_mems_cookie;
 
 	gfp_mask &= gfp_allowed_mask;
 
@@ -2319,15 +2398,15 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
 	if (unlikely(!zonelist->_zonerefs->zone))
 		return NULL;
 
-	get_mems_allowed();
+retry_cpuset:
+	cpuset_mems_cookie = get_mems_allowed();
+
 	/* The preferred zone is used for statistics later */
 	first_zones_zonelist(zonelist, high_zoneidx,
 				nodemask ? : &cpuset_current_mems_allowed,
 				&preferred_zone);
-	if (!preferred_zone) {
-		put_mems_allowed();
-		return NULL;
-	}
+	if (!preferred_zone)
+		goto out;
 
 	/* First allocation attempt */
 	page = get_page_from_freelist(gfp_mask|__GFP_HARDWALL, nodemask, order,
@@ -2337,9 +2416,19 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
 		page = __alloc_pages_slowpath(gfp_mask, order,
 				zonelist, high_zoneidx, nodemask,
 				preferred_zone, migratetype);
-	put_mems_allowed();
 
 	trace_mm_page_alloc(page, order, gfp_mask, migratetype);
+
+out:
+	/*
+	 * When updating a task's mems_allowed, it is possible to race with
+	 * parallel threads in such a way that an allocation can fail while
+	 * the mask is being updated. If a page allocation is about to fail,
+	 * check if the cpuset changed during allocation and if so, retry.
+	 */
+	if (unlikely(!put_mems_allowed(cpuset_mems_cookie) && !page))
+		goto retry_cpuset;
+
 	return page;
 }
 EXPORT_SYMBOL(__alloc_pages_nodemask);
@@ -2563,13 +2652,15 @@ void si_meminfo_node(struct sysinfo *val, int nid)
 bool skip_free_areas_node(unsigned int flags, int nid)
 {
 	bool ret = false;
+	unsigned int cpuset_mems_cookie;
 
 	if (!(flags & SHOW_MEM_FILTER_NODES))
 		goto out;
 
-	get_mems_allowed();
-	ret = !node_isset(nid, cpuset_current_mems_allowed);
-	put_mems_allowed();
+	do {
+		cpuset_mems_cookie = get_mems_allowed();
+		ret = !node_isset(nid, cpuset_current_mems_allowed);
+	} while (!put_mems_allowed(cpuset_mems_cookie));
 out:
 	return ret;
 }
@@ -2721,6 +2812,37 @@ void show_free_areas(unsigned int filter)
 
 	show_swap_cache_info();
 }
+
+#ifdef CONFIG_COMPACTION_RETRY_DEBUG
+void show_buddy_info(void)
+{
+	struct zone *zone;
+	unsigned long nr[MAX_ORDER], flags, order, total = 0;
+	char buf[256];
+	int len;
+
+	for_each_populated_zone(zone) {
+
+		if (skip_free_areas_node(SHOW_MEM_FILTER_NODES,
+					zone_to_nid(zone)))
+			continue;
+		show_node(zone);
+		len = sprintf(buf, "%s: ", zone->name);
+
+		spin_lock_irqsave(&zone->lock, flags);
+		for (order = 0; order < MAX_ORDER; order++) {
+			nr[order] = zone->free_area[order].nr_free;
+			total += nr[order] << order;
+		}
+		spin_unlock_irqrestore(&zone->lock, flags);
+		for (order = 0; order < MAX_ORDER; order++)
+			len += sprintf(buf + len, "%lu*%lukB ",
+					nr[order], K(1UL) << order);
+		len += sprintf(buf + len, "= %lukB", K(total));
+		pr_err("%s\n", buf);
+	}
+}
+#endif
 
 static void zoneref_set_zone(struct zone *zone, struct zoneref *zoneref)
 {
@@ -3449,25 +3571,33 @@ static void setup_zone_migrate_reserve(struct zone *zone)
 		if (page_to_nid(page) != zone_to_nid(zone))
 			continue;
 
-		/* Blocks with reserved pages will never free, skip them. */
-		block_end_pfn = min(pfn + pageblock_nr_pages, end_pfn);
-		if (pageblock_is_reserved(pfn, block_end_pfn))
-			continue;
-
 		block_migratetype = get_pageblock_migratetype(page);
 
-		/* If this block is reserved, account for it */
-		if (reserve > 0 && block_migratetype == MIGRATE_RESERVE) {
-			reserve--;
-			continue;
-		}
+		/* Only test what is necessary when the reserves are not met */
+		if (reserve > 0) {
+			/*
+			 * Blocks with reserved pages will never free, skip
+			 * them.
+			 */
+			block_end_pfn = min(pfn + pageblock_nr_pages, end_pfn);
+			if (pageblock_is_reserved(pfn, block_end_pfn))
+				continue;
 
-		/* Suitable for reserving if this block is movable */
-		if (reserve > 0 && block_migratetype == MIGRATE_MOVABLE) {
-			set_pageblock_migratetype(page, MIGRATE_RESERVE);
-			move_freepages_block(zone, page, MIGRATE_RESERVE);
-			reserve--;
-			continue;
+			/* If this block is reserved, account for it */
+			if (block_migratetype == MIGRATE_RESERVE) {
+				reserve--;
+				continue;
+			}
+
+			/* Suitable for reserving if this block is movable */
+			if (block_migratetype == MIGRATE_MOVABLE) {
+				set_pageblock_migratetype(page,
+							MIGRATE_RESERVE);
+				move_freepages_block(zone, page,
+							MIGRATE_RESERVE);
+				reserve--;
+				continue;
+			}
 		}
 
 		/*
@@ -5041,6 +5171,7 @@ static int page_alloc_cpu_notify(struct notifier_block *self,
 void __init page_alloc_init(void)
 {
 	hotcpu_notifier(page_alloc_cpu_notify, 0);
+	init_rwsem(&page_alloc_slow_rwsem);
 }
 
 /*
@@ -5596,6 +5727,17 @@ __count_immobile_pages(struct zone *zone, struct page *page, int count)
 bool is_pageblock_removable_nolock(struct page *page)
 {
 	struct zone *zone = page_zone(page);
+	unsigned long pfn = page_to_pfn(page);
+
+	/*
+	 * We have to be careful here because we are iterating over memory
+	 * sections which are not zone aware so we might end up outside of
+	 * the zone but still within the section.
+	 */
+	if (!zone || zone->zone_start_pfn > pfn ||
+			zone->zone_start_pfn + zone->spanned_pages <= pfn)
+		return false;
+
 	return __count_immobile_pages(zone, page, 0);
 }
 

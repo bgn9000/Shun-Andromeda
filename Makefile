@@ -1,6 +1,6 @@
 VERSION = 3
 PATCHLEVEL = 0
-SUBLEVEL = 15
+SUBLEVEL = 43
 EXTRAVERSION =
 NAME = Sneaky Weasel
 
@@ -193,7 +193,7 @@ SUBARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ \
 # Note: Some architectures assign CROSS_COMPILE in their arch/*/Makefile
 export KBUILD_BUILDHOST := $(SUBARCH)
 ARCH		?= arm
-CROSS_COMPILE	= /opt/toolchains/arm-eabi-4.4.3/bin/arm-eabi-
+CROSS_COMPILE	?= $(CONFIG_CROSS_COMPILE:"%"=%)
 
 # Architecture as present in compile.h
 UTS_MACHINE 	:= $(ARCH)
@@ -347,6 +347,12 @@ CHECK		= sparse
 
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
+XX_A9 	    = 	-marm -march=armv7-a \
+		-mcpu=cortex-a9 -mfpu=neon -mfloat-abi=softfp
+XX_GRAPHITE = 	-fgraphite-identity -floop-block -ftree-loop-linear \
+		-floop-strip-mine -ftree-loop-distribution
+XX_MODULO   = 	-fmodulo-sched -fmodulo-sched-allow-regmoves
+
 CFLAGS_MODULE   =
 AFLAGS_MODULE   =
 LDFLAGS_MODULE  =
@@ -368,7 +374,8 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
-		   -fno-delete-null-pointer-checks
+		   -fno-delete-null-pointer-checks \
+		   $(XX_A9) $(XX_GRAPHITE) $(XX_MODULO)
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
 KBUILD_AFLAGS   := -D__ASSEMBLY__
@@ -558,10 +565,18 @@ endif # $(dot-config)
 # Defaults to vmlinux, but the arch makefile usually adds further targets
 all: vmlinux
 
+ifdef CONFIG_CC_OPTIMIZE_FOR_FAST
+KBUILD_CFLAGS	+= -Ofast -DCONFIG_CC_OPTIMIZE_FOR_SPEED
+else
+ifdef CONFIG_CC_OPTIMIZE_FOR_SPEED
+KBUILD_CFLAGS	+= -O3 -DCONFIG_CC_OPTIMIZE_FOR_SPEED
+else
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS	+= -Os
 else
 KBUILD_CFLAGS	+= -O2
+endif
+endif
 endif
 
 ifdef CONFIG_CC_CHECK_WARNING_STRICTLY
