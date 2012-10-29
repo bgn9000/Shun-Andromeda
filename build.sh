@@ -24,7 +24,7 @@ fi
 echo compiling modules...
 cd $KERNELDIR/
 # compile whole kernel, not just modules, to get the errors sooner
-nice -n 10 make V=1 -j2 || exit 1
+nice -n 10 make V=1 -j4 || exit 1
 
 echo initramfs...
 rm -rf $INITRAMFS_TMP
@@ -48,7 +48,7 @@ ls -lh $INITRAMFS_TMP.cpio
 cd -
 
 echo compiling kernel...
-nice -n 10 make -j3 zImage CONFIG_INITRAMFS_SOURCE="$INITRAMFS_TMP.cpio" || exit 1
+nice -n 10 make -j4 zImage CONFIG_INITRAMFS_SOURCE="$INITRAMFS_TMP.cpio" || exit 1
 $KERNELDIR/mkshbootimg.py $KERNELDIR/zImage $KERNELDIR/arch/arm/boot/zImage $KERNELDIR/payload.tar
 
 if [ "${1}" == "ATT" ];then

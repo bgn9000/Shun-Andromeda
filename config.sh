@@ -14,9 +14,9 @@ export CROSS_COMPILE=$PARENT_DIR/arm-2012/bin_472/arm-linux-gnueabihf-
 
 if [ ! -f $KERNELDIR/.config ];
 then
-	if [ "${1}" == "ATT" ];then
+	if [ "$1" == "ATT" ];then
 	  make V=1 bgn9000_att_defconfig
-	elif [ "${1}" == "NTT" ];then
+	elif [ "$1" == "NTT" ];then
 	  make V=1 bgn9000_ntt_defconfig
 	else
 	  make V=1 bgn9000_defconfig
