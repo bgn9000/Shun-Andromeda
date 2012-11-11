@@ -66,9 +66,11 @@ fi
 
 # for ntfs automounting
 insmod /lib/modules/fuse.ko
-mkdir /mnt/ntfs
+mount -o remount,rw /
+mkdir -p /mnt/ntfs
 mount -t tmpfs tmpfs /mnt/ntfs
 chmod 777 /mnt/ntfs
+mount -o remount,ro /
 
 /sbin/busybox sh /sbin/ext/properties.sh
 
@@ -80,9 +82,6 @@ chmod 777 /mnt/ntfs
 ##### Early-init phase tweaks #####
 /sbin/busybox sh /sbin/ext/tweaks.sh
 
-#apply last soundgasm level on boot
-/res/uci.sh soundgasm_hp $soundgasm_hp
-
 /sbin/busybox mount -t rootfs -o remount,ro rootfs
 
 ##### EFS Backup #####
@@ -92,16 +91,15 @@ sleep 30
 /sbin/busybox sh /sbin/ext/efs-backup.sh
 ) &
 
-# apply ExTweaks defaults
-{
-sleep 30
-/res/uci.sh apply
-}&
+sleep 12
+#apply last soundgasm level on boot
+/res/uci.sh soundgasm_hp $soundgasm_hp
 
-##### init scripts #####
-(
-/sbin/busybox sh /sbin/ext/run-init-scripts.sh
-)&
+# apply ExTweaks defaults
+/res/uci.sh apply
 
 #usb mode
 /res/customconfig/actions/usb-mode ${usb_mode}
+
+##### init scripts #####
+/sbin/busybox sh /sbin/ext/run-init-scripts.sh

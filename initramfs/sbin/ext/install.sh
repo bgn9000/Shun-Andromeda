@@ -100,6 +100,8 @@ then
   chown 0.0 /system/xbin/ntfs-3g
   chmod 755 /system/xbin/ntfs-3g
 fi
-rm -rf /tmp/misc/
+
+rm -rf /res/misc/payload
+
 /sbin/busybox mount -t rootfs -o remount,ro rootfs
 mount -o remount,ro /system

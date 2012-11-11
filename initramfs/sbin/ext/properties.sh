@@ -3,8 +3,8 @@
 mkdir -p /customkernel/property 
 echo true >> /customkernel/property/customkernel.cf-root 
 echo true >> /customkernel/property/customkernel.base.cf-root 
-echo Shun >> /customkernel/property/customkernel.name 
-echo "Shun" >> /customkernel/property/customkernel.namedisplay 
+echo ShunKernel >> /customkernel/property/customkernel.name 
+echo "ShunKernel" >> /customkernel/property/customkernel.namedisplay 
 echo 104 >> /customkernel/property/customkernel.version.number 
 echo 5.2 >> /customkernel/property/customkernel.version.name 
 echo true >> /customkernel/property/customkernel.bootani.zip 
