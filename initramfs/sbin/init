@@ -10,7 +10,7 @@ if grep -q bootmode=2 /proc/cmdline ; then
   mv -f /res/misc/init.40/* /
   cp -a /recovery.rc /init.rc
   rm -f /sbin/recovery
-  xz -d /sbin/recovery-philz.xz
+#  xz -d /sbin/recovery-philz.xz
   mv -f /sbin/recovery-philz /sbin/recovery
   chmod 755 /innt
   chmod 644 /*.rc
