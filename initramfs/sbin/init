@@ -29,19 +29,17 @@ if busybox grep -q 1 /sys/class/power_supply/battery/batt_lp_charging ; then
   exec /sbin/init2
 fi
 
-NOBOOTLOGO=0
 mkdir /mnt
 chmod 755 /mnt
 mount -t vfat /dev/block/mmcblk1p1 /mnt && ( touch /mnt/clockworkmod/.nomedia; umount /mnt; )
 mount -t vfat /dev/block/mmcblk0p11 /mnt && ( touch /mnt/clockworkmod/.nomedia )
-[ -f /mnt/sdcard/.nobootlogo ] && NOBOOTLOGO=1
-umount /mnt
-
-if [ "$NOBOOTLOGO" == "1" ];then
+if [ -f /mnt/.nobootlogo ];
+then
 	/sbin/choose_rom
 else
 	/sbin/choose_rom 0
 fi
+umount /mnt
 
 /sbin/busybox mount -t ext4 /res/dev/system /system
 
