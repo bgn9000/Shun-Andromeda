@@ -92,49 +92,64 @@
   </settingsTab>
 
   <settingsTab name="GPU">
-    <settingsPane description="GPU Frequency Settings. Normally, our device has 2 frequency steps. Shun Kernel has three steps but the third step is not enabled as default. The defaults are 160,267 and 267. Voltage defaults are 950mV, 1000mV and 1000mV." name="GPUFreq">
-      <spinner description="Changes the first (lowest) GPU frequency step" name="GPU Freq Step1" action="gpu-freq 1">
-             <spinnerItem name="400MHz" value="400"/> 
+    <settingsPane description="GPU Frequency Settings. Defaults frequencies are 100, 133, 160, 200 and 267. Voltage defaults are 900mV, 950mV, 1000mV and 1050mV." name="GPUFreq">
+      <spinner description="Changes the first GPU frequency step" name="GPU Freq Step1" action="gpu-freq 1">
              <spinnerItem name="267MHz" value="267"/> 
              <spinnerItem name="200MHz" value="200"/> 
              <spinnerItem name="160MHz" value="160"/> 
-             <spinnerItem name="133MHz" value="133"/> 
-             <spinnerItem name="100MHz" value="100"/> 
+             <spinnerItem name="108MHz" value="108"/> 
              <spinnerItem name="66MHz" value="66"/> 
-             <spinnerItem name="40MHz" value="40"/> 
+             <spinnerItem name="54MHz" value="54"/> 
       </spinner>
-      <spinner description="Changes the second (middle) GPU frequency step" name="GPU Freq Step2" action="gpu-freq 2">
-             <spinnerItem name="400MHz" value="400"/> 
+      <spinner description="Changes the second GPU frequency step" name="GPU Freq Step2" action="gpu-freq 2">
+             <spinnerItem name="330MHz" value="330"/> 
              <spinnerItem name="267MHz" value="267"/> 
              <spinnerItem name="200MHz" value="200"/> 
              <spinnerItem name="160MHz" value="160"/> 
-             <spinnerItem name="133MHz" value="133"/> 
-             <spinnerItem name="100MHz" value="100"/> 
+             <spinnerItem name="108MHz" value="108"/> 
              <spinnerItem name="66MHz" value="66"/> 
-             <spinnerItem name="40MHz" value="40"/> 
       </spinner>
-      <spinner description="Changes the third (last) GPU frequency step" name="GPU Freq Step3" action="gpu-freq 3">
+      <spinner description="Changes the third GPU frequency step" name="GPU Freq Step3" action="gpu-freq 3">
              <spinnerItem name="400MHz" value="400"/> 
+             <spinnerItem name="330MHz" value="330"/> 
              <spinnerItem name="267MHz" value="267"/> 
              <spinnerItem name="200MHz" value="200"/> 
              <spinnerItem name="160MHz" value="160"/> 
-             <spinnerItem name="133MHz" value="133"/> 
-             <spinnerItem name="100MHz" value="100"/> 
-             <spinnerItem name="66MHz" value="66"/> 
-             <spinnerItem name="40MHz" value="40"/> 
+             <spinnerItem name="108MHz" value="108"/> 
+      </spinner>
+      <spinner description="Changes the fourth GPU frequency step" name="GPU Freq Step4" action="gpu-freq 4">
+             <spinnerItem name="520MHz" value="520"/> 
+             <spinnerItem name="440MHz" value="440"/> 
+             <spinnerItem name="400MHz" value="400"/> 
+             <spinnerItem name="330MHz" value="330"/> 
+             <spinnerItem name="267MHz" value="267"/> 
+             <spinnerItem name="200MHz" value="200"/> 
+             <spinnerItem name="160MHz" value="160"/> 
+      </spinner>
+      <spinner description="Changes the fifth GPU frequency step" name="GPU Freq Step5" action="gpu-freq 5">
+             <spinnerItem name="520MHz" value="520"/> 
+             <spinnerItem name="440MHz" value="440"/> 
+             <spinnerItem name="400MHz" value="400"/> 
+             <spinnerItem name="330MHz" value="330"/> 
+             <spinnerItem name="267MHz" value="267"/> 
+             <spinnerItem name="200MHz" value="200"/> 
       </spinner>
     </settingsPane>
 
-    <settingsPane description="GPU Voltage Levels: The defaults are 950,1050 and 1050." name="GPU Voltage Levels">
-      <seekBar description="GPU Voltage for the first (lowest) step" 
-		name="GPU Voltage Level1" action="gpu-voltage 1" unit="mV" min="700" reversed="false" step="50" max="1200"/>
-      <seekBar description="GPU Voltage for the second (middle) step" 
-		name="GPU Voltage Level2" action="gpu-voltage 2" unit="mV" min="700" reversed="false" step="50" max="1200"/>
-      <seekBar description="GPU Voltage for the third (highest) step" 
-		name="GPU Voltage Level3" action="gpu-voltage 3" unit="mV" min="700" reversed="false" step="50" max="1200"/>
+    <settingsPane description="GPU Voltage Levels: The defaults are 900, 950, 950, 1000 and 1050." name="GPU Voltage Levels">
+      <seekBar description="GPU Voltage for the first step" 
+		name="GPU Voltage Level1" action="gpu-voltage 1" unit="mV" min="800" reversed="false" step="50" max="1400"/>
+      <seekBar description="GPU Voltage for the second step" 
+		name="GPU Voltage Level2" action="gpu-voltage 2" unit="mV" min="800" reversed="false" step="50" max="1400"/>
+      <seekBar description="GPU Voltage for the third step" 
+		name="GPU Voltage Level3" action="gpu-voltage 3" unit="mV" min="800" reversed="false" step="50" max="1400"/>
+      <seekBar description="GPU Voltage for the fourth step" 
+		name="GPU Voltage Level4" action="gpu-voltage 4" unit="mV" min="800" reversed="false" step="50" max="1400"/>
+      <seekBar description="GPU Voltage for the fifth step" 
+		name="GPU Voltage Level5" action="gpu-voltage 5" unit="mV" min="800" reversed="false" step="50" max="1400"/>
     </settingsPane>
 
-    <settingsPane description="GPU load thresholds to change between frequency steps. The third step is disabled as default by having the second to third threshold 100." name="GPU Thresholds">
+    <settingsPane description="GPU load thresholds to change between frequency steps." name="GPU Thresholds">
       <seekBar description="GPU threshold to jump up from first to second step" 
 		name="GPU Threshold 1-UP" action="gpu-thresh 1UP" unit="%" min="0" reversed="false" step="5" max="100"/>
       <seekBar description="GPU threshold to jump down from second to first step" 
@@ -143,15 +158,14 @@
 		name="GPU Threshold 2-UP" action="gpu-thresh 2UP" unit="%" min="0" reversed="false" step="5" max="100"/>
       <seekBar description="GPU threshold to jump down from third to second step" 
 		name="GPU Threshold 3-DOWN" action="gpu-thresh 3DOWN" unit="%" min="0" reversed="false" step="5" max="100"/>
-    </settingsPane>
-
-    <settingsPane description="The number of cycles that the GPU stays at the specific level. The defaults are 1,1 and 1." name="GPU StayCount">
-      <seekBar description="GPU first (for the lowest freq) StayCount" 
-		name="GPU StayCount1" action="gpu-staycount 1" unit=" sec" min="0" reversed="false" step="1" max="5"/>
-      <seekBar description="GPU second (for the middle freq) StayCount" 
-		name="GPU StayCount2" action="gpu-staycount 2" unit=" sec" min="0" reversed="false" step="1" max="5"/>
-      <seekBar description="GPU third (for the highest freq) StayCount" 
-		name="GPU StayCount3" action="gpu-staycount 3" unit=" sec" min="0" reversed="false" step="1" max="5"/>
+      <seekBar description="GPU threshold to jump up from third to fourth step" 
+		name="GPU Threshold 3-UP" action="gpu-thresh 3UP" unit="%" min="0" reversed="false" step="5" max="100"/>
+      <seekBar description="GPU threshold to jump down from fourth to third step" 
+		name="GPU Threshold 4-DOWN" action="gpu-thresh 4DOWN" unit="%" min="0" reversed="false" step="5" max="100"/>
+      <seekBar description="GPU threshold to jump up from fourth to fifth step" 
+		name="GPU Threshold 4-UP" action="gpu-thresh 4UP" unit="%" min="0" reversed="false" step="5" max="100"/>
+      <seekBar description="GPU threshold to jump down from fifth to fourth step" 
+		name="GPU Threshold 5-DOWN" action="gpu-thresh 5DOWN" unit="%" min="0" reversed="false" step="5" max="100"/>
     </settingsPane>
 
   </settingsTab>

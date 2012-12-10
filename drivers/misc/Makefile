@@ -78,3 +78,4 @@ obj-$(CONFIG_MACH_M0_CTC)   += cw_tty.o
 
 # Secure OS Mobicore Interface
 obj-$(CONFIG_MOBICORE_SUPPORT)  += tzic.o
+obj-$(CONFIG_MALI_CONTROL)	+= mali_control.o

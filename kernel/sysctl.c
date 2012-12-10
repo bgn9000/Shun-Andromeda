@@ -229,6 +229,9 @@ int sysctl_legacy_va_layout;
 
 extern int late_init_android_gadget(int romtype);
 extern int u1_gps_ntt_init(void);
+#ifdef CONFIG_MALI_CONTROL
+extern int register_mali_control(void);
+#endif
 int
 rom_feature_set_sysctl(struct ctl_table *table, int write,
                      void __user *buffer, size_t *lenp,
@@ -251,6 +254,9 @@ rom_feature_set_sysctl(struct ctl_table *table, int write,
 		rom_feature_set_save = rom_feature_set;
 		printk("Initializing USB with rom_feature_set: %d\n", rom_feature_set);
 		late_init_android_gadget(rom_feature_set);
+#ifdef CONFIG_MALI_CONTROL
+		register_mali_control();
+#endif
 	}
 	return 0;
 }
