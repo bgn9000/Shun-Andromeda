@@ -147,15 +147,20 @@ _mali_osk_errcode_t mali_descriptor_mapping_set(mali_descriptor_mapping * map, i
 	MALI_ERROR(result);
 }
 
-void mali_descriptor_mapping_free(mali_descriptor_mapping * map, int descriptor)
+void *mali_descriptor_mapping_free(mali_descriptor_mapping * map, int descriptor)
 {
+	void *old_value = NULL;
+
     _mali_osk_lock_wait(map->lock, _MALI_OSK_LOCKMODE_RW);
 	if ( (descriptor >= 0) && (descriptor < map->current_nr_mappings) && _mali_osk_test_bit(descriptor, map->table->usage) )
 	{
+		old_value = map->table->mappings[descriptor];
 		map->table->mappings[descriptor] = NULL;
 		_mali_osk_clear_nonatomic_bit(descriptor, map->table->usage);
 	}
     _mali_osk_lock_signal(map->lock, _MALI_OSK_LOCKMODE_RW);
+
+	return old_value;
 }
 
 static mali_descriptor_table * descriptor_table_alloc(int count)

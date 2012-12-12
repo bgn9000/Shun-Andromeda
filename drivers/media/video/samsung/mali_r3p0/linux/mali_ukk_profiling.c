@@ -147,14 +147,21 @@ int profiling_report_sw_counters_wrapper(struct mali_session_data *session_data,
 		return -EFAULT;
 	}
 
+	/* make sure that kargs.num_counters is [at least somewhat] sane */
+	if (kargs.num_counters > 10000) {
+		MALI_DEBUG_PRINT(1, ("User space attempted to allocate too many counters.\n"));
+		return -EINVAL;
+	}
+
 	counter_buffer = (u32*)kmalloc(sizeof(u32) * kargs.num_counters, GFP_KERNEL);
 	if (NULL == counter_buffer)
 	{
-		return -EFAULT;
+		return -ENOMEM;
 	}
 
 	if (0 != copy_from_user(counter_buffer, kargs.counters, sizeof(u32) * kargs.num_counters))
 	{
+		kfree(counter_buffer);
 		return -EFAULT;
 	}
 

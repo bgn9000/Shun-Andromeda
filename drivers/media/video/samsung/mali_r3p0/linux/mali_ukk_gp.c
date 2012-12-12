@@ -37,7 +37,6 @@ int gp_start_job_wrapper(struct mali_session_data *session_data, _mali_uk_gp_sta
 
     kargs.ctx = NULL; /* prevent kernel address to be returned to user space */
     
-    /* @@@@ todo: this copies everything just for the _mali_uk_gp_start_job_s member, do we really need that??? */
     if (0 != copy_to_user(uargs, &kargs, sizeof(_mali_uk_gp_start_job_s)))
 	{
 		/*

@@ -49,31 +49,23 @@ _mali_osk_errcode_t mali_mem_validation_add_range(const _mali_osk_resource_t *re
 
 _mali_osk_errcode_t mali_mem_validation_check(u32 phys_addr, u32 size)
 {
-	if ((0 == ( phys_addr & (~_MALI_OSK_CPU_PAGE_MASK))) &&
-	    (0 == ( size & (~_MALI_OSK_CPU_PAGE_MASK))))
+	if (phys_addr < (phys_addr + size)) /* Don't allow overflow (or zero size) */
 	{
-		if ((phys_addr          >= mali_mem_validator.phys_base) &&
-		    ((phys_addr + (size - 1)) >= mali_mem_validator.phys_base) &&
-		    (phys_addr          <= (mali_mem_validator.phys_base + (mali_mem_validator.size - 1))) &&
-		    ((phys_addr + (size - 1)) <= (mali_mem_validator.phys_base + (mali_mem_validator.size - 1))) )
+		if ((0 == ( phys_addr & (~_MALI_OSK_CPU_PAGE_MASK))) &&
+			(0 == ( size & (~_MALI_OSK_CPU_PAGE_MASK))))
 		{
-			return _MALI_OSK_ERR_OK;
+			if ((phys_addr          >= mali_mem_validator.phys_base) &&
+				((phys_addr + (size - 1)) >= mali_mem_validator.phys_base) &&
+				(phys_addr          <= (mali_mem_validator.phys_base + (mali_mem_validator.size - 1))) &&
+				((phys_addr + (size - 1)) <= (mali_mem_validator.phys_base + (mali_mem_validator.size - 1))) )
+			{
+				MALI_DEBUG_PRINT(3, ("Accepted range 0x%08X + size 0x%08X (= 0x%08X)\n", phys_addr, size, (phys_addr + size - 1)));
+				return _MALI_OSK_ERR_OK;
+			}
 		}
 	}
 
-	MALI_PRINT_ERROR(("*******************************************************************************\n"));
-	MALI_PRINT_ERROR(("MALI PHYSICAL RANGE VALIDATION ERROR!\n"));
-	MALI_PRINT_ERROR(("\n"));
-	MALI_PRINT_ERROR(("We failed to validate a Mali-Physical range that the user-side wished to map in\n"));
-	MALI_PRINT_ERROR(("\n"));
-	MALI_PRINT_ERROR(("It is likely that the user-side wished to do Direct Rendering, but a suitable\n"));
-	MALI_PRINT_ERROR(("address range validation mechanism has not been correctly setup\n"));
-	MALI_PRINT_ERROR(("\n"));
-	MALI_PRINT_ERROR(("The range supplied was: phys_base=0x%08X, size=0x%08X\n", phys_addr, size));
-	MALI_PRINT_ERROR(("\n"));
-	MALI_PRINT_ERROR(("Please refer to the ARM Mali Software Integration Guide for more information.\n"));
-	MALI_PRINT_ERROR(("\n"));
-	MALI_PRINT_ERROR(("*******************************************************************************\n"));
+	MALI_PRINT_ERROR(("MALI PHYSICAL RANGE VALIDATION ERROR: The range supplied was: phys_base=0x%08X, size=0x%08X\n", phys_addr, size));
 
 	return _MALI_OSK_ERR_FAULT;
 }

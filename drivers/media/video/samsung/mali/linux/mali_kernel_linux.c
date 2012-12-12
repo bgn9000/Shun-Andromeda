@@ -86,7 +86,7 @@ MODULE_PARM_DESC(mali_boot_profiling, "Start profiling as a part of Mali driver 
 extern int mali_dvfs_control;
 module_param(mali_dvfs_control, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP| S_IROTH); /* rw-rw-r-- */
 MODULE_PARM_DESC(mali_dvfs_control, "Mali Current DVFS");
-#if defined(CONFIG_CPU_EXYNOS4210)
+#if 0 //defined(CONFIG_CPU_EXYNOS4210)
 #else
 extern int step0_clk;
 module_param(step0_clk, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP| S_IROTH); /* rw-rw-r-- */
@@ -150,6 +150,24 @@ extern int step3_vol;
 module_param(step3_vol, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP| S_IROTH); /* rw-rw-r-- */
 MODULE_PARM_DESC(step3_vol, "Mali Current step3_vol");
 #endif
+#if (MALI_DVFS_STEPS > 4)
+extern int step4_clk;
+module_param(step4_clk, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP| S_IROTH); /* rw-rw-r-- */
+MODULE_PARM_DESC(step4_clk, "Mali Current step4_clk");
+
+extern int step3_up;
+module_param(step3_up, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP| S_IROTH); /* rw-rw-r-- */
+MODULE_PARM_DESC(step3_up, "Mali Current step3_up");
+
+extern int step4_down;
+module_param(step4_down, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP| S_IROTH); /* rw-rw-r-- */
+MODULE_PARM_DESC(step4_down, "Mali Current step4_down");
+#ifdef DEBUG
+extern int step4_vol;
+module_param(step4_vol, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP| S_IROTH); /* rw-rw-r-- */
+MODULE_PARM_DESC(step4_vol, "Mali Current step4	_vol");
+#endif
+#endif
 #endif
 #endif
 #endif
@@ -165,6 +183,10 @@ extern int mali_dvfs_utilization;
 module_param(mali_dvfs_utilization, int, S_IRUSR | S_IRGRP | S_IROTH); /* r--r--r-- */
 MODULE_PARM_DESC(mali_dvfs_utilization, "Mali Current Utilization");
 
+extern int mali_gpu_utilization_timeout;
+module_param(mali_gpu_utilization_timeout, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP| S_IROTH); /* rw--rw--r-- */
+MODULE_PARM_DESC(mali_gpu_utilization_timeout, "Mali GPU Utilization Timeout");
+
 extern int mali_gpu_vol;
 module_param(mali_gpu_vol, int, S_IRUSR | S_IRGRP | S_IROTH); /* r--r--r-- */
 MODULE_PARM_DESC(mali_gpu_vol, "Mali Current Voltage");
@@ -174,6 +196,15 @@ module_param(gpu_power_state, int, S_IRUSR | S_IRGRP | S_IROTH); /* r--r--r-- */
 MODULE_PARM_DESC(gpu_power_state, "Mali Power State");
 extern _mali_device_power_states mali_dvfs_device_state;
 
+int mali_touch_boost_level = 0;
+module_param(mali_touch_boost_level, int, S_IRUSR | S_IWUSR | S_IWGRP | S_IRGRP | S_IROTH); /* rw--rw--r-- */
+MODULE_PARM_DESC(mali_touch_boost_level, "Mali Touch Boost Level");
+
+#ifdef CONFIG_CPU_EXYNOS4210
+int mali_use_vpll = 0;
+module_param(mali_use_vpll, int, S_IRUSR | S_IWUSR | S_IWGRP | S_IRGRP | S_IROTH); /* rw--rw--r-- */
+MODULE_PARM_DESC(mali_use_vpll, "Mali Use VPLL for Clock");
+#endif
 static char mali_dev_name[] = "mali"; /* should be const, but the functions we call requires non-cost */
 
 /* the mali device */
@@ -205,7 +236,7 @@ struct file_operations mali_fops =
 };
 
 
-int mali_driver_init(void)
+int late_mali_driver_init(void)
 {
 	int err;
 #if USING_MALI_PMM
@@ -237,6 +268,11 @@ int mali_driver_init(void)
 	MALI_DEBUG_PRINT(2, ("%s\n", __malidrv_build_info()));
 
     return 0;
+}
+
+int mali_driver_init(void)
+{
+	return 0;
 }
 
 void mali_driver_exit(void)
