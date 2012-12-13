@@ -228,7 +228,12 @@ int sysctl_legacy_va_layout;
 #endif
 
 extern int late_init_android_gadget(int romtype);
+extern int mfc_late_init(void);
+#ifdef CONFIG_CPU_EXYNOS4210
 extern int u1_gps_ntt_init(void);
+#endif
+extern int new_late_mali_driver_init(void);
+extern int late_mali_driver_init(void);
 #ifdef CONFIG_MALI_CONTROL
 extern int register_mali_control(void);
 #endif
@@ -248,14 +253,25 @@ rom_feature_set_sysctl(struct ctl_table *table, int write,
 		if( (rom_feature_set & 0x10) == 0x10)
 		{
 			rom_feature_set = rom_feature_set_save;
+#ifdef CONFIG_CPU_EXYNOS4210
 			u1_gps_ntt_init();
+#endif
 			return 0;
 		}
 		rom_feature_set_save = rom_feature_set;
 		printk("Initializing USB with rom_feature_set: %d\n", rom_feature_set);
 		late_init_android_gadget(rom_feature_set);
+#ifdef CONFIG_MALI_R3P0_LSI
+		if(rom_feature_set & 2) new_late_mali_driver_init();
+		else late_mali_driver_init();
+#else
+		late_mali_driver_init();
+#endif
 #ifdef CONFIG_MALI_CONTROL
 		register_mali_control();
+#endif
+#ifndef CONFIG_CPU_EXYNOS4210
+		mfc_late_init();
 #endif
 	}
 	return 0;
