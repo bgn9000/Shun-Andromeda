@@ -1,5 +1,4 @@
 import init.smdk4210.usb.rc
-import init.gps.rc
 
 on early-init
     export EXTERNAL_STORAGE /storage/sdcard0
@@ -13,7 +12,7 @@ on early-init
     mkdir /mnt 0775 root system
     mkdir /mnt/.lfs 0755 root root
 
-    # for backwards compatibility
+# for backwards compatibility
     symlink /storage/sdcard0 /sdcard
     symlink /storage/sdcard0 /mnt/sdcard
     symlink /storage/sdcard1 /extSdCard
@@ -37,20 +36,16 @@ on early-init
 
 on fs
 # mount ext4 partitions
-    mount ext4 /res/dev/system /system noatime wait ro
+    mount ext4 /res/dev/system /system noatime wait
 
-    mount tmpfs tmpfs /system/lib/modules
-    symlink /lib/modules/cifs.ko /system/lib/modules/cifs.ko
-    symlink /lib/modules/j4fs.ko /system/lib/modules/j4fs.ko
-    symlink /lib/modules/dhd.ko /system/lib/modules/dhd.ko
-    symlink /lib/modules/scsi_wait_scan.ko /system/lib/modules/scsi_wait_scan.ko
-    symlink /lib/modules/Si4709_driver.ko /system/lib/modules/Si4709_driver.ko
-
+# Check and mount /cache
     exec sfsck /res/dev/cache ext4
     mount ext4 /res/dev/cache /cache nosuid nodev noatime wait
+    exec sfsck /res/dev/data ext4
     mount ext4 /res/dev/data /data nosuid nodev noatime wait noauto_da_alloc
-    
+    mount ext4 /dev/block/mmcblk0p12 /preload nosuid nodev noatime wait
     mount ext4 /dev/block/mmcblk0p1 /efs nosuid nodev noatime wait
+
     mkdir /efs/bluetooth
     mkdir /efs/wifi
     chown radio system /efs/bluetooth
@@ -63,16 +58,6 @@ on fs
     chmod 0770 /data/misc/wifi 
 
 on post-fs-data
-# insmod kernel modules
-    insmod /system/lib/modules/j4fs.ko
-    insmod /system/lib/modules/Si4709_driver.ko
-    
-# mount param.lfs
-    mount j4fs /dev/block/mmcblk0p4 /mnt/.lfs
-
-# MDNS
-    socket mdns stream 0660 root system
-    
 # GPS
     chown root system /dev/ttySAC1
     chmod 0660 /dev/ttySAC1
@@ -83,7 +68,7 @@ on post-fs-data
     mkdir /data/gps 771 system system
     chown system system /data/gps
 
-    # give system access to wpa_supplicant.conf for backup and restore
+# give system access to wpa_supplicant.conf for backup and restore
     mkdir /data/misc/wifi 0770 wifi wifi
     chmod 0770 /data/misc/wifi
     chmod 0660 /data/misc/wifi/wpa_supplicant.conf
@@ -96,7 +81,7 @@ on post-fs-data
     chown root root /system/etc/security/.drm
     chmod 0775 /system/etc/security/.drm
 
-    # Added for Playready DRM Support
+# Added for Playready DRM Support
     mkdir /data/data/.drm 0775
     chown drm system /data/data/.drm
     chmod 0775 /data/data/.drm
@@ -104,12 +89,12 @@ on post-fs-data
     chown drm system /data/data/.drm/.playready
     chmod 0775 /data/data/.drm/.playready
 
-    #Added drm folder to copy drm plugins
+#Added drm folder to copy drm plugins
     mkdir /system/lib/drm 0775
     chown root root /system/lib/drm
     chmod 0775 /system/lib/drm
 
-    # DivX DRM
+# DivX DRM
     mkdir /efs/.files 0775
     mkdir /efs/.files/.dx1 0775
     mkdir /efs/.files/.dm33 0775
@@ -120,7 +105,7 @@ on post-fs-data
     chmod 0775 /efs/.files/.dx1
     chmod 0775 /efs/.files/.dm33
     chmod 0775 /efs/.files/.mp301
-    
+
 # MTP Device permission.
     chmod 0660 /dev/usb_mtp_gadget
     chown system system /dev/usb_mtp_gadget
@@ -141,7 +126,10 @@ on post-fs-data
     chmod 0770 /dev/snd/timer
     chmod 0770 /dev/snd/hwC0D0
 
-    # create log system
+# Permission for MHL
+    chown system radio /sys/class/mhl/test_result
+
+# create log system
     mkdir /data/log 0775 system log
     chown system log /data/log
 
@@ -153,7 +141,7 @@ on post-fs-data
     chown system system /data/pxtmpdir
     chmod 0775 /data/pxtmpdir
 
-    # permission for HDMI audio path
+# permission for HDMI audio path
     chown media audio /sys/class/hdmi_audio/hdmi_audio/hdmi_audio_set_ext
 
 # Permissions for gpio_keys.
@@ -190,6 +178,7 @@ on post-fs-data
     chown system radio /sys/devices/virtual/sec/sec_key/sec_key_pressed
 
     chown system radio /sys/devices/virtual/sec/sec_touchkey/force_disable
+    chown system radio /sys/devices/virtual/sec/sec_touchkey/enable_disable
     chown system radio /sys/devices/virtual/sec/sec_touchkey/recommended_version
     chown system radio /sys/devices/virtual/sec/sec_touchkey/touch_sensitivity
     chown system radio /sys/devices/virtual/sec/sec_touchkey/brightness
@@ -257,7 +246,8 @@ on post-fs-data
     chown system media_rw /sys/class/mdnie/mdnie/outdoor
     chown system media_rw /sys/class/mdnie/mdnie/scenario
     chown system media_rw /sys/class/mdnie/mdnie/negative
-    write /sys/class/mdnie/mdnie/scenario 4
+    write /sys/class/mdnie/mdnie/scenario 0
+    write /sys/class/mdnie/mdnie/mode 0
 
 # Permissions for uart_sel and usb_sel
     chown system radio /sys/class/sec/switch/uart_sel/value
@@ -276,7 +266,7 @@ on post-fs-data
 # Permission for radio
     chown system radio /sys/devices/platform/s5p-ehci/ehci_power
     chown system radio /sys/devices/platform/s5p-ehci/ehci_runtime
-    chown system radio /sys/devices/virtual/misc/multipdp/waketime    
+    chown system radio /sys/devices/virtual/misc/multipdp/waketime
 
 # for datarouter
     chown system system /dev/dun
@@ -284,10 +274,6 @@ on post-fs-data
     chown system system /dev/ttyGS1
     chown system system /dev/ttyGS2
     chown system system /dev/ttyGS3
-
-# DVFS - cpufreq ondemand
-    write /sys/devices/system/cpu/cpufreq/ondemand/down_differential 5
-    write /sys/devices/system/cpu/cpufreq/ondemand/up_threshold 85
 
 #panorama directory creation
     mkdir /data/pxtmpdir 0775
@@ -320,8 +306,6 @@ on post-fs-data
     setprop vold.post_fs_data_done 1
 
 on boot
-    mount debugfs /sys/kernel/debug /sys/kernel/debug
-
     setprop ro.radio.noril yes
 
 # permissions for NFC
@@ -348,23 +332,23 @@ service mdnsd /system/bin/mdnsd
 
 service p2p_supplicant /system/bin/wpa_supplicant \
     -Dnl80211 -iwlan0 -puse_p2p_group_interface=1 -c/data/misc/wifi/wpa_supplicant.conf -e/data/misc/wifi/entropy.bin 
-    # we will start as root and wpa_supplicant will switch to user wifi
-    # after setting up the capabilities required for WEXT
-    # user wifi
-    # group wifi inet keystore
+# we will start as root and wpa_supplicant will switch to user wifi
+# after setting up the capabilities required for WEXT
+# user wifi
+# group wifi inet keystore
     class main
-    socket wpa_wlan0 dgram 660 wifi wifi
+    socket wpa_wlan0 dgram 0660 wifi wifi
     disabled
     oneshot
 
 service wpa_supplicant /system/bin/wpa_supplicant \
 	-Dnl80211 -iwlan0 -puse_p2p_group_interface=1 -c/data/misc/wifi/wpa_supplicant.conf -e/data/misc/wifi/entropy.bin
-    # we will start as root and wpa_supplicant will switch to user wifi
-    # after setting up the capabilities required for WEXT
-    # user wifi
-    # group wifi inet keystore
+# we will start as root and wpa_supplicant will switch to user wifi
+# after setting up the capabilities required for WEXT
+# user wifi
+# group wifi inet keystore
 	class main
-	socket wpa_wlan0 dgram 660 wifi wifi
+	socket wpa_wlan0 dgram 0660 wifi wifi
 	disabled
 	oneshot
 
@@ -409,11 +393,4 @@ service bdaddr /system/bin/bdaddr_read
 service TvoutService_C /system/bin/bintvoutservice
      class main
      user system
-     group graphics 
-     
-# bugreport is triggered by holding down volume down, volume up and power
-service bugreport /system/bin/bugmailer.sh -v
-    class main
-    disabled
-    oneshot
-    keycodes 114 115 116
+     group graphics

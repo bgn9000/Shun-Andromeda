@@ -52,31 +52,39 @@ fi;
 AOSP=0
 MIUI=0
 CM10=0
-
+CM101=0
 
 [ -f /system/framework/framework2.jar ] || AOSP=1
 [ -f /system/framework/framework-miui.jar ] && MIUI=1
 [ -f /system/framework/seccamera.jar ] || CM10=1
+[ -f /system/bin/wfd ] || CM101=1
 
-if [ "$CM10" == 1 ];
+if [ "$CM101" == 1 ];
 then
-echo 1 > /proc/sys/kernel/rom_feature_set
-rm -rf /vendor
-mv -f /res/misc/init.cm10/* /
+	echo 2 > /proc/sys/kernel/rom_feature_set
+	rm -rf /vendor
+	mv -f /res/misc/init.cm10.1/* /
 else
-	if [ "$AOSP" == "1" ];
+	if [ "$CM10" == 1 ];
 	then
 	echo 1 > /proc/sys/kernel/rom_feature_set
-	mv -f /res/misc/init.cm9/* /
 	rm -rf /vendor
+	mv -f /res/misc/init.cm10/* /
 	else
-	echo 0 > /proc/sys/kernel/rom_feature_set
-	mv -f /res/misc/init.40/* /
-	fi;
+		if [ "$AOSP" == "1" ];
+		then
+		echo 1 > /proc/sys/kernel/rom_feature_set
+		mv -f /res/misc/init.cm9/* /
+		rm -rf /vendor
+		else
+		echo 0 > /proc/sys/kernel/rom_feature_set
+		mv -f /res/misc/init.40/* /
+		fi;
 
-	if [ "$MIUI" == 1 ];
-	then
-	cp -a /res/misc/init.miui/* /
+		if [ "$MIUI" == 1 ];
+		then
+		cp -a /res/misc/init.miui/* /
+		fi
 	fi
 fi
 
