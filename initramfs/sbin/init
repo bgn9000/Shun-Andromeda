@@ -64,6 +64,7 @@ then
 	echo 2 > /proc/sys/kernel/rom_feature_set
 	rm -rf /vendor
 	mv -f /res/misc/init.cm10.1/* /
+	cp -a /sbin/adbd.cm10-1 /sbin/adbd
 else
 	if [ "$CM10" == 1 ];
 	then
