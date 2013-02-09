@@ -89,7 +89,7 @@
 #undef WRITE_MACADDR
 #undef READ_MACADDR
 #ifdef CONFIG_BCM4334
-#define RDWR_KORICS_MACADDR
+#define READ_MACADDR
 #else
 #define RDWR_MACADDR
 #endif

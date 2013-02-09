@@ -1595,7 +1595,7 @@ static void max8997_muic_mhl_detect(struct work_struct *work)
 
 	mutex_lock(&info->mutex);
 	info->is_mhl_ready = true;
-#if !defined(CONFIG_MACH_U1) || !defined(CONFIG_MACH_TRATS)
+#if !defined(CONFIG_MACH_U1) && !defined(CONFIG_MACH_TRATS)
 	if (mdata->is_mhl_attached) {
 		if (!mdata->is_mhl_attached())
 			goto out;

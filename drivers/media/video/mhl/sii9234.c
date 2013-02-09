@@ -2255,7 +2255,7 @@ static int sii9234_detection_callback(void)
 	pr_info("sii9234: Detection failed");
 	if (sii9234->state == STATE_DISCONNECTED) {
 		pr_cont(" (timeout)");
-		sii9234->pdata->power_state = 0;
+		schedule_work(&sii9234->mhl_end_work);
 	} else if (sii9234->state == STATE_DISCOVERY_FAILED)
 		pr_cont(" (discovery failed)");
 	else if (sii9234->state == NO_MHL_STATUS)
@@ -2265,8 +2265,12 @@ static int sii9234_detection_callback(void)
 	pr_cont("\n");
 
 	/*mhl spec: 8.3.3, if discovery failed, must retry discovering */
+#ifdef	CONFIG_SAMSUNG_USE_11PIN_CONNECTOR
 	if ((sii9234->state == STATE_DISCOVERY_FAILED) &&
 	    (sii9234->rgnd == RGND_1K)) {
+#else
+	if ((sii9234->state == STATE_DISCOVERY_FAILED)) {
+#endif
 		pr_cont("Discovery failed but RGND_1K impedence"
 			" restart detection_callback");
 
@@ -2281,7 +2285,7 @@ static int sii9234_detection_callback(void)
 	pr_info("sii9234: Detection failed");
 	if (sii9234->state == STATE_DISCONNECTED) {
 		pr_cont(" (timeout)");
-		sii9234->pdata->power_state = 0;
+		schedule_work(&sii9234->mhl_end_work);
 	} else if (sii9234->state == STATE_DISCOVERY_FAILED)
 		pr_cont(" (discovery failed)");
 	else if (sii9234->state == NO_MHL_STATUS)
@@ -2291,8 +2295,12 @@ static int sii9234_detection_callback(void)
 	pr_cont("\n");
 
 	/*mhl spec: 8.3.3, if discovery failed, must retry discovering */
+#ifdef	CONFIG_SAMSUNG_USE_11PIN_CONNECTOR
 	if ((sii9234->state == STATE_DISCOVERY_FAILED) &&
 	    (sii9234->rgnd == RGND_1K)) {
+#else
+	if ((sii9234->state == STATE_DISCOVERY_FAILED)) {
+#endif
 		pr_cont("Discovery failed but RGND_1K impedence"
 			" restart detection_callback");
 
@@ -3521,7 +3529,13 @@ static irqreturn_t sii9234_irq_thread(int irq, void *data)
 	if (mhl_poweroff) {
 		if (sii9234_callback_sched != 0) {
 			sii9234_disable_irq();
-			schedule_work(&sii9234->mhl_d3_work);
+			if (sii9234->pdata->factory_test == 0) {
+				schedule_work(&sii9234->mhl_d3_work);
+				pr_info("%s() normal goto_d3\n", __func__);
+			} else {
+				pr_info("%s() factory skip goto_d3\n", __func__);
+				mhl_onoff_ex(0);
+			}
 		}
 	}
 	return IRQ_HANDLED;
@@ -3566,7 +3580,31 @@ static ssize_t sysfs_check_mhl_command(struct class *class,
 	return size;
 }
 
-static CLASS_ATTR(test_result, 0664, sysfs_check_mhl_command, NULL);
+static ssize_t sysfs_check_factory_store(struct class *class,
+		struct class_attribute *attr, const char *buf, size_t size)
+{
+	struct sii9234_data *sii9234 = dev_get_drvdata(sii9244_mhldev);
+	const char *p = buf;
+	u8 value = 0;
+
+	if (p[0] == '1')
+		value = 1;
+	else
+		value = 0;
+
+	sii9234->pdata->factory_test = value;
+
+	if (sii9234->pdata->factory_test == 1)
+		pr_info("sii9234: in factory mode\n");
+	else
+		pr_info("sii9234: not factory mode\n");
+
+	return size;
+
+}
+
+static CLASS_ATTR(test_result, 0664, sysfs_check_mhl_command,
+		sysfs_check_factory_store);
 #endif /*__CONFIG_SS_FACTORY__*/
 
 static ssize_t sysfs_mhl_read_reg_show(struct device *dev,
@@ -3820,6 +3858,7 @@ static int __devinit sii9234_mhl_tx_i2c_probe(struct i2c_client *client,
 		goto err_exit1;
 	}
 	sii9234->pdata->mhl_tx_client = client;
+	sii9234->pdata->factory_test = 0;
 
 	init_waitqueue_head(&sii9234->wq);
 	mutex_init(&sii9234->lock);
