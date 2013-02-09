@@ -181,14 +181,14 @@ repeat:
 
 		/* add to bug fix code, j.gap.lee@samsung.com, 2012.04.23 */
 		/* barrier check */
-		if (!journal->j_running_transaction &&
-		    !journal->j_barrier_count) {
+		if (journal->j_barrier_count) {
 			write_unlock(&journal->j_state_lock);
 			goto repeat;
 		}
 		/* end */
 
-		if (!journal->j_running_transaction) {
+		if (!journal->j_running_transaction &&
+                    !journal->j_barrier_count) {
 			jbd2_get_transaction(journal, new_transaction);
 			new_transaction = NULL;
 		}
