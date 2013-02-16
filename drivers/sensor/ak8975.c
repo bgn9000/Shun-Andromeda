@@ -27,7 +27,11 @@
 #include "ak8975-reg.h"
 #include <linux/sensor/sensors_core.h>
 
+#ifdef CONFIG_SLP
+#define FACTORY_TEST
+#else
 #undef FACTORY_TEST
+#endif
 #undef MAGNETIC_LOGGING
 
 #define VENDOR		"AKM"
@@ -719,6 +723,7 @@ int akm8975_probe(struct i2c_client *client,
 		goto exit_i2c_failed;
 	}
 
+	err = -ENOMEM;
 	akm->dev = sensors_classdev_register("magnetic_sensor");
 	if (IS_ERR(akm->dev)) {
 		printk(KERN_ERR "Failed to create device!");
@@ -744,8 +749,6 @@ int akm8975_probe(struct i2c_client *client,
 	}
 
 #ifdef FACTORY_TEST
-	ak8975c_selftest(akm);
-
 	if (device_create_file(akm->dev, &dev_attr_adc) < 0) {
 		printk(KERN_ERR "Failed to create device file(%s)!\n",
 			dev_attr_adc.attr.name);
@@ -831,12 +834,14 @@ static int __devexit akm8975_remove(struct i2c_client *client)
 	device_remove_file(akm->dev, &dev_attr_ak8975_asa);
 	device_remove_file(akm->dev, &dev_attr_ak8975_selftest);
 	device_remove_file(akm->dev, &dev_attr_ak8975_chk_registers);
+	device_remove_file(akm->dev, &dev_attr_ak8975_chk_cntl);
 	#endif
 	device_remove_file(akm->dev, &dev_attr_name);
 	device_remove_file(akm->dev, &dev_attr_vendor);
 	device_remove_file(akm->dev, &dev_attr_raw_data);
 	sensors_classdev_unregister(akm->dev);
 	misc_deregister(&akm->akmd_device);
+	disable_irq(akm->irq);
 	free_irq(akm->irq, akm);
 	gpio_free(akm->pdata->gpio_data_ready_int);
 	mutex_destroy(&akm->lock);
