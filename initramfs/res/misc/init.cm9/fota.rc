@@ -44,11 +44,8 @@ on early-fs
     # insmod /lib/modules/rfs_glue.ko
     # insmod /lib/modules/rfs_fat.ko
        
-
     # parameter block
     mkdir /mnt/.lfs 0755 root root
-    insmod /lib/modules/j4fs.ko
-    mount j4fs /dev/block/mmcblk0p4 /mnt/.lfs
     insmod /lib/modules/param.ko
     
     insmod /lib/modules/drop_caches.ko
@@ -83,14 +80,13 @@ on fs
     chown system system /data/fota 
     chmod 0777 /data/fota
  
-	  #mount rfs /dev/block/stl11 /cache nosuid nodev check=no
-	  mount ext4 /dev/block/mmcblk0p7 /cache nosuid nodev noatime wait
+    #mount rfs /dev/block/stl11 /cache nosuid nodev check=no
+    mount ext4 /dev/block/mmcblk0p7 /cache nosuid nodev noatime wait
     chown system cache /cache
     chmod 0770 /cache
     mkdir /cache/fota
     chown system system /cache/fota 
     chmod 0777 /cache/fota
-    
     
     #mount rfs /dev/block/stl3 /efs nosuid nodev check=no
 
@@ -100,11 +96,9 @@ on post-fs
     chmod 750 /sbin/fat.format
     mount rootfs rootfs / ro remount
   
-    write /proc/sys/kernel/panic_on_oops 1
+    write /proc/sys/kernel/panic_on_oops 0
     write /proc/sys/kernel/hung_task_timeout_secs 0
     write /proc/cpu/alignment 4
-    write /proc/sys/kernel/sched_latency_ns 10000000
-    write /proc/sys/kernel/sched_wakeup_granularity_ns 2000000
     write /proc/sys/kernel/sched_compat_yield 1
     write /proc/sys/kernel/sched_child_runs_first 0
     	
@@ -120,4 +114,4 @@ service ueventd /sbin/ueventd
     critical
     
 service redbend_ua /sbin/redbend_ua all
-	  oneshot
+    oneshot

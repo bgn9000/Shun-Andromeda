@@ -8,8 +8,9 @@
 /dev/ashmem               0666   root       root
 /dev/binder               0666   root       root
 
-# logger should be world writable (for logging) but not readable
-/dev/log/*                0662   root       log
+# Anyone can read the logs, but if they're not in the "logs"
+# group, then they'll only see log entries for their UID.
+/dev/log/*                0666   root       log
 
 # the msm hw3d client device node is world writable/readable.
 /dev/msm_hw3dc            0666   root       root
@@ -17,12 +18,16 @@
 # gpu driver for adreno200 is globally accessible
 /dev/kgsl                 0666   root       root
 
+# kms driver for drm based gpu
+/dev/dri/*                0666   root       graphics
+
 # these should not be world writable
 /dev/diag                 0660   radio      radio
 /dev/diag_arm9            0660   radio      radio
 /dev/android_adb          0660   adb        adb
 /dev/android_adb_enable   0660   adb        adb
 /dev/ttyMSM0              0600   bluetooth  bluetooth
+/dev/uhid                 0660   system     bluetooth
 /dev/uinput               0660   system     bluetooth
 /dev/alarm                0664   system     radio
 /dev/tty0                 0660   root       system
