@@ -18,7 +18,6 @@ menuconfig J4FS
 
 menuconfig FM_RADIO
 	tristate "FM Radio Driver"
-	depends on SAMSUNG_MODULES
 	default n
 	help
 	  Say Y to enable FM Radio Driver

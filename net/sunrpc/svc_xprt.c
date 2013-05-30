@@ -930,6 +930,17 @@ void svc_close_all(struct svc_serv *serv)
 {
 	struct svc_pool *pool;
 	struct svc_xprt *xprt;
+
+	list_for_each_entry(xprt, xprt_list, xpt_list) {
+		set_bit(XPT_CLOSE, &xprt->xpt_flags);
+		set_bit(XPT_BUSY, &xprt->xpt_flags);
+	}
+}
+
+void svc_close_all(struct svc_serv *serv)
+{
+	struct svc_pool *pool;
+	struct svc_xprt *xprt;
 	struct svc_xprt *tmp;
 	int i;
 

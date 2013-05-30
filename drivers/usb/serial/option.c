@@ -461,6 +461,21 @@ static void option_instat_callback(struct urb *urb);
 #define CHANGHONG_VENDOR_ID			0x2077
 #define CHANGHONG_PRODUCT_CH690			0x7001
 
+/* Viettel products */
+#define VIETTEL_VENDOR_ID			0x2262
+#define VIETTEL_PRODUCT_VT1000			0x0002
+
+/* ZD Incorporated */
+#define ZD_VENDOR_ID				0x0685
+#define ZD_PRODUCT_7000				0x7000
+
+/* LG products */
+#define LG_VENDOR_ID				0x1004
+#define LG_PRODUCT_L02C				0x618f
+
+/* MediaTek products */
+#define MEDIATEK_VENDOR_ID			0x0e8d
+
 /* some devices interfaces need special handling due to a number of reasons */
 enum option_blacklist_reason {
 		OPTION_BLACKLIST_NONE = 0,

@@ -147,6 +147,10 @@ static unsigned int get_nr_run_avg(void)
 #define MAX_SAMPLING_DOWN_FACTOR		(100000)
 #define DEF_FREQUENCY_DOWN_DIFFERENTIAL		(5)
 #define DEF_FREQUENCY_UP_THRESHOLD		(85)
+
+/* for multiple freq_step */
+#define DEF_UP_THRESHOLD_DIFF	(5)
+
 #define DEF_FREQUENCY_MIN_SAMPLE_RATE		(10000)
 #define MIN_FREQUENCY_UP_THRESHOLD		(11)
 #define MAX_FREQUENCY_UP_THRESHOLD		(100)
@@ -161,7 +165,10 @@ static unsigned int get_nr_run_avg(void)
 #define DEF_UP_NR_CPUS				(1)
 #define DEF_CPU_UP_RATE				(10)
 #define DEF_CPU_DOWN_RATE			(20)
-#define DEF_FREQ_STEP				(40)
+#define DEF_FREQ_STEP				(37)
+/* for multiple freq_step */
+#define DEF_FREQ_STEP_DEC			(13)
+
 #define DEF_START_DELAY				(0)
 
 #define UP_THRESHOLD_AT_MIN_FREQ		(60)
@@ -306,7 +313,7 @@ static void apply_hotplug_lock(void)
 	lock = atomic_read(&g_hotplug_lock);
 	flag = lock - online;
 
-	if (flag == 0)
+	if (lock == 0 || flag == 0)
 		return;
 
 	work = flag > 0 ? &dbs_info->up_work : &dbs_info->down_work;
@@ -353,6 +360,38 @@ int cpufreq_pegasusq_cpu_unlock(int num_core)
 	return 0;
 }
 
+void cpufreq_pegasusq_min_cpu_lock(unsigned int num_core)
+{
+	int online, flag;
+	struct cpu_dbs_info_s *dbs_info;
+
+	dbs_tuners_ins.min_cpu_lock = min(num_core, num_possible_cpus());
+
+	dbs_info = &per_cpu(od_cpu_dbs_info, 0); /* from CPU0 */
+	online = num_online_cpus();
+	flag = (int)num_core - online;
+	if (flag <= 0)
+		return;
+	queue_work_on(dbs_info->cpu, dvfs_workqueue, &dbs_info->up_work);
+}
+
+void cpufreq_pegasusq_min_cpu_unlock(void)
+{
+	int online, lock, flag;
+	struct cpu_dbs_info_s *dbs_info;
+
+	dbs_tuners_ins.min_cpu_lock = 0;
+
+	dbs_info = &per_cpu(od_cpu_dbs_info, 0); /* from CPU0 */
+	online = num_online_cpus();
+	lock = atomic_read(&g_hotplug_lock);
+	if (lock == 0)
+		return;
+	flag = lock - online;
+	if (flag >= 0)
+		return;
+	queue_work_on(dbs_info->cpu, dvfs_workqueue, &dbs_info->down_work);
+}
 
 /*
  * History of CPU usage
@@ -361,6 +400,7 @@ struct cpu_usage {
 	unsigned int freq;
 	unsigned int load[NR_CPUS];
 	unsigned int rq_avg;
+	unsigned int avg_load;
 };
 
 struct cpu_usage_history {
@@ -705,7 +745,10 @@ static ssize_t store_min_cpu_lock(struct kobject *a, struct attribute *b,
 	ret = sscanf(buf, "%u", &input);
 	if (ret != 1)
 		return -EINVAL;
-	dbs_tuners_ins.min_cpu_lock = min(input, num_possible_cpus());
+	if (input == 0)
+		cpufreq_pegasusq_min_cpu_unlock();
+	else
+		cpufreq_pegasusq_min_cpu_lock(input);
 	return count;
 }
 
@@ -853,9 +896,15 @@ static void cpu_up_work(struct work_struct *work)
 	int cpu;
 	int online = num_online_cpus();
 	int nr_up = dbs_tuners_ins.up_nr_cpus;
+	int min_cpu_lock = dbs_tuners_ins.min_cpu_lock;
 	int hotplug_lock = atomic_read(&g_hotplug_lock);
-	if (hotplug_lock)
+
+	if (hotplug_lock && min_cpu_lock)
+		nr_up = max(hotplug_lock, min_cpu_lock) - online;
+	else if (hotplug_lock)
 		nr_up = hotplug_lock - online;
+	else if (min_cpu_lock)
+		nr_up = max(nr_up, min_cpu_lock - online);
 
 	if (online == 1) {
 		printk(KERN_ERR "CPU_UP 3\n");
@@ -924,6 +973,7 @@ static int check_up(void)
 	int num_hist = hotplug_history->num_hist;
 	struct cpu_usage *usage;
 	int freq, rq_avg;
+	int avg_load;
 	int i;
 	int up_rate = dbs_tuners_ins.cpu_up_rate;
 	int up_freq, up_rq;
@@ -960,6 +1010,7 @@ static int check_up(void)
 
 		freq = usage->freq;
 		rq_avg =  usage->rq_avg;
+		avg_load = usage->avg_load;
 
 		min_freq = min(min_freq, freq);
 		min_rq_avg = min(min_rq_avg, rq_avg);
@@ -986,6 +1037,7 @@ static int check_down(void)
 	int num_hist = hotplug_history->num_hist;
 	struct cpu_usage *usage;
 	int freq, rq_avg;
+	int avg_load;
 	int i;
 	int down_rate = dbs_tuners_ins.cpu_down_rate;
 	int down_freq, down_rq;
@@ -1022,6 +1074,7 @@ static int check_down(void)
 
 		freq = usage->freq;
 		rq_avg =  usage->rq_avg;
+		avg_load = usage->avg_load;
 
 		max_freq = max(max_freq, freq);
 		max_rq_avg = max(max_rq_avg, rq_avg);
@@ -1054,10 +1107,19 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	int max_hotplug_rate = MAX_HOTPLUG_RATE;
 	int up_threshold = dbs_tuners_ins.up_threshold;
 
+	/* add total_load, avg_load to get average load */
+	unsigned int total_load = 0;
+	unsigned int avg_load = 0;
+	int load_each[4] = {-1, -1, -1, -1};
+	int rq_avg = 0;
 	policy = this_dbs_info->cur_policy;
 
 	hotplug_history->usage[num_hist].freq = policy->cur;
 	hotplug_history->usage[num_hist].rq_avg = get_nr_run_avg();
+
+	/* add total_load, avg_load to get average load */
+	rq_avg = hotplug_history->usage[num_hist].rq_avg;
+
 	++hotplug_history->num_hist;
 
 	/* Get Absolute Load - in terms of freq */
@@ -1115,6 +1177,12 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 			continue;
 
 		load = 100 * (wall_time - idle_time) / wall_time;
+
+		/* keep load of each CPUs and combined load across all CPUs */
+		if (cpu_online(j))
+			load_each[j] = load;
+		total_load += load;
+
 		hotplug_history->usage[num_hist].load[j] = load;
 
 		freq_avg = __cpufreq_driver_getavg(policy, j);
@@ -1125,6 +1193,10 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		if (load_freq > max_load_freq)
 			max_load_freq = load_freq;
 	}
+	/* calculate the average load across all related CPUs */
+	avg_load = total_load / num_online_cpus();
+	hotplug_history->usage[num_hist].avg_load = avg_load;
+
 
 	/* Check for CPU hotplug */
 	if (check_up()) {
@@ -1143,8 +1215,22 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	}
 
 	if (max_load_freq > up_threshold * policy->cur) {
-		int inc = (policy->max * dbs_tuners_ins.freq_step) / 100;
-		int target = min(policy->max, policy->cur + inc);
+		/* for multiple freq_step */
+		int inc = policy->max * (dbs_tuners_ins.freq_step
+					- DEF_FREQ_STEP_DEC * 2) / 100;
+		int target = 0;
+
+		/* for multiple freq_step */
+		if (max_load_freq > (up_threshold + DEF_UP_THRESHOLD_DIFF * 2)
+			* policy->cur)
+			inc = policy->max * dbs_tuners_ins.freq_step / 100;
+		else if (max_load_freq > (up_threshold + DEF_UP_THRESHOLD_DIFF)
+			* policy->cur)
+			inc = policy->max * (dbs_tuners_ins.freq_step
+					- DEF_FREQ_STEP_DEC) / 100;
+
+		target = min(policy->max, policy->cur + inc);
+
 		/* If switching to max speed, apply sampling_down_factor */
 		if (policy->cur < policy->max && target == policy->max)
 			this_dbs_info->rate_mult =

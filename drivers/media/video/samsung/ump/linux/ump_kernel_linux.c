@@ -92,7 +92,7 @@ static int ump_file_ioctl(struct inode *inode, struct file *filp, unsigned int c
 #endif
 static int ump_file_mmap(struct file * filp, struct vm_area_struct * vma);
 
-#if defined(CONFIG_VIDEO_MALI400MP) || defined(CONFIG_VIDEO_MALI400MP_R3P0) || defined(CONFIG_VIDEO_MALI400MP_R2P3)
+#if defined(CONFIG_VIDEO_MALI400MP) || defined(CONFIG_VIDEO_MALI400MP_R3P0) || defined(CONFIG_VIDEO_MALI400MP_R2P3) || defined(CONFIG_VIDEO_MALI400MP_UMP)
 extern int map_errcode( _mali_osk_errcode_t err );
 #endif
 
@@ -407,6 +407,7 @@ static int ump_file_ioctl(struct inode *inode, struct file *filp, unsigned int c
 #ifndef CONFIG_VIDEO_MALI400MP_R2P3
 #ifndef CONFIG_VIDEO_MALI400MP
 #ifndef CONFIG_VIDEO_MALI400MP_R3P0
+#ifndef CONFIG_VIDEO_MALI400MP_UMP
 int map_errcode( _mali_osk_errcode_t err )
 {
     switch(err)
@@ -422,6 +423,7 @@ int map_errcode( _mali_osk_errcode_t err )
         default: return -EFAULT;
     }
 }
+#endif
 #endif
 #endif
 #endif

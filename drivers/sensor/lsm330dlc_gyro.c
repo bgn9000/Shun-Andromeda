@@ -910,7 +910,8 @@ read_zero_rate_again:
 	/* check out watermark status */
 	status_reg = i2c_smbus_read_byte_data(data->client, FIFO_SRC_REG);
 	if (!(status_reg & 0x80)) {
-		pr_err("%s: Watermark level is not enough\n", __func__);
+		pr_err("%s: Watermark level is not enough(0x%x)\n",
+			__func__, status_reg);
 		goto exit;
 	}
 
@@ -1082,8 +1083,8 @@ static int lsm330dlc_gyro_bypass_self_test\
 				bZYXDA = temp & 0x08;
 				if (!bZYXDA) {
 					usleep_range(10000, 20000);
-					pr_err("%s: %d,%d: no_data_ready",
-							__func__, i, j);
+					pr_err("%s: %d,%d: no_data_ready, (0x%x)",
+							__func__, i, j, temp);
 					continue;
 				} else
 					break;
@@ -1153,8 +1154,8 @@ static int lsm330dlc_gyro_bypass_self_test\
 				bZYXDA = temp & 0x08;
 				if (!bZYXDA) {
 					usleep_range(10000, 20000);
-					pr_err("%s: %d,%d: no_data_ready",
-							__func__, i, j);
+					pr_err("%s: %d,%d: no_data_ready, (0x%x)",
+							__func__, i, j, temp);
 					continue;
 				} else
 					break;
@@ -1271,7 +1272,7 @@ static ssize_t lsm330dlc_gyro_self_test(struct device *dev,
 	else if (!fifo_pass)
 		printk(KERN_INFO "[gyro_self_test] fifo self-test fail\n");
 	else
-		printk(KERN_INFO "[gyro_self_test] fifo self-test restry\n");
+		printk(KERN_INFO "[gyro_self_test] fifo self-test retry\n");
 
 	/* calibration result */
 	if (cal_pass == 1)
@@ -1288,7 +1289,7 @@ static ssize_t lsm330dlc_gyro_self_test(struct device *dev,
 	else if (!bypass_pass)
 		printk(KERN_INFO "[gyro_self_test] bypass self-test fail\n\n");
 	else
-		printk(KERN_INFO "[gyro_self_test] bypass self-test restry\n\n");
+		printk(KERN_INFO "[gyro_self_test] bypass self-test retry\n\n");
 
 	/* restore backup register */
 	for (i = 0; i < 10; i++) {
@@ -1406,6 +1407,7 @@ static int lsm330dlc_gyro_probe(struct i2c_client *client,
 	data->client = client;
 	data->sensitivity_value = 2;
 
+	data->dps = DPS500;
 	/* read chip id */
 	ret = i2c_smbus_read_byte_data(client, WHO_AM_I);
 

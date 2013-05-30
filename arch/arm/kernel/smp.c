@@ -312,6 +312,8 @@ asmlinkage void __cpuinit secondary_start_kernel(void)
 
 	printk("CPU%u: Booted secondary processor\n", cpu);
 
+	printk("CPU%u: Booted secondary processor\n", cpu);
+
 	cpu_init();
 	preempt_disable();
 	trace_hardirqs_off();

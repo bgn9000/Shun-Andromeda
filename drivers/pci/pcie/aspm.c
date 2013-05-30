@@ -790,9 +790,12 @@ void pcie_clear_aspm(struct pci_bus *bus)
 {
 	struct pci_dev *child;
 
+<<<<<<< HEAD
 	if (aspm_force)
 		return;
 
+=======
+>>>>>>> 4e35ef2... GT-I9100_JB_Opensource.zip
 	/*
 	 * Clear any ASPM setup that the firmware has carried out on this bus
 	 */

@@ -193,7 +193,7 @@ struct mxt224_data {
 	bool median_err_flag;
 	int touch_is_pressed_arr[MAX_USING_FINGER_NUM];
 
-#if defined(CONFIG_TARGET_LOCALE_NAATT)
+#if defined(CONFIG_TARGET_LOCALE_NAATT) || defined(CONFIG_TARGET_LOCALE_NAATT_TEMP)
 	bool gain_change_flag;
 	int gain_ta;
 #endif
@@ -500,16 +500,18 @@ static void mxt224_ta_probe(bool ta_status)
 		copy_data->noise_median.mferr_setting = false;
 #endif
 	} else {
-		if (copy_data->boot_or_resume == 1)
-			copy_data->threshold = copy_pdata->tchthr_batt_init;
-		else
-			copy_data->threshold = copy_pdata->tchthr_batt;
-		copy_data->threshold_e = copy_pdata->tchthr_batt_e;
-		calcfg_dis = copy_pdata->calcfg_batt_e;
-		calcfg_en = copy_pdata->calcfg_batt_e | 0x20;
-		noise_threshold = copy_pdata->noisethr_batt;
-		movfilter = copy_pdata->movfilter_batt;
-		charge_time = copy_pdata->chrgtime_batt_e;
+		if (copy_data->boot_or_resume == 1) {
+			copy_data->threshold = copy_data->tchthr_batt_init;
+			calcfg_dis = copy_data->calcfg_batt_e;
+		} else {
+			copy_data->threshold = copy_data->tchthr_batt;
+			calcfg_dis = copy_data->calcfg_batt_e ^ 0x20;
+		}
+		copy_data->threshold_e = copy_data->tchthr_batt_e;
+
+		calcfg_en = copy_data->calcfg_batt_e | 0x20;
+		noise_threshold = copy_data->noisethr_batt;
+		charge_time = copy_data->chrgtime_batt_e;
 #ifdef CLEAR_MEDIAN_FILTER_ERROR
 		copy_data->gErrCondition = ERR_RTN_CONDITION_IDLE;
 		copy_data->noise_median.mferr_count = 0;
@@ -575,10 +577,12 @@ static void mxt224_ta_probe(bool ta_status)
 		size_one = 1;
 		write_mem(copy_data, obj_address + (u16) register_address,
 			  size_one, &value);
+#if !defined(PRODUCT_SHIP)
 		read_mem(copy_data, obj_address + (u16) register_address,
 			 (u8) size_one, &val);
 		printk(KERN_ERR "[TSP]TA_probe MXT224E T%d Byte%d is %d\n", 48,
 		       register_address, val);
+#endif
 #endif
 		if (ta_status)
 			write_config(copy_data, PROCG_NOISESUPPRESSION_T48,
@@ -591,54 +595,52 @@ static void mxt224_ta_probe(bool ta_status)
 			value = copy_data->blen_charging_e;
 			write_mem(copy_data, obj_address + 34, size_one,
 				  &value);
+#if !defined(PRODUCT_SHIP)
 			read_mem(copy_data, obj_address + 34, (u8) size_one,
 				 &val);
 			printk(KERN_DEBUG
 			       "[TSP]TA_probe MXT224E T%d Byte%d is %d\n", 48,
 			       34, val);
+#endif
 
 			value = 40;
 			write_mem(copy_data, obj_address + 35, size_one,
 				  &value);
+#if !defined(PRODUCT_SHIP)
 			read_mem(copy_data, obj_address + 35, (u8) size_one,
 				 &val);
 			printk(KERN_DEBUG
 			       "[TSP]TA_probe MXT224E T%d Byte%d is %d\n", 48,
 			       35, val);
+#endif
 
 			value = 240;
 			write_mem(copy_data, obj_address + 43, size_one,
 				  &value);
-			read_mem(copy_data, obj_address + 43, (u8) size_one,
-				 &val);
 
 			value = 245;
 			write_mem(copy_data, obj_address + 44, size_one,
 				  &value);
-			read_mem(copy_data, obj_address + 44, (u8) size_one,
-				 &val);
 
 			value = 148;
 			write_mem(copy_data, obj_address + 47, size_one,
 				  &value);
-			read_mem(copy_data, obj_address + 47, (u8) size_one,
-				 &val);
 
 			value = 50;
 			write_mem(copy_data, obj_address + 48, size_one,
 				  &value);
-			read_mem(copy_data, obj_address + 48, (u8) size_one,
-				 &val);
 		}
 #endif
 #ifndef CONFIG_TARGET_LOCALE_NAATT_TEMP
 		value = calcfg_en;
 		write_mem(copy_data, obj_address + (u16) register_address,
 			  size_one, &value);
+#if !defined(PRODUCT_SHIP)
 		read_mem(copy_data, obj_address + (u16) register_address,
 			 (u8) size_one, &val);
 		printk(KERN_ERR "[TSP]TA_probe MXT224E T%d Byte%d is %d\n", 48,
 		       register_address, val);
+#endif
 #endif
 	} else {
 		if (copy_data->freq_table.fherr_setting >= 1) {
@@ -682,10 +684,12 @@ static void mxt224_ta_probe(bool ta_status)
 		value = (u8) copy_data->threshold;
 		write_mem(copy_data, obj_address + (u16) register_address,
 			  size_one, &value);
+#if !defined(PRODUCT_SHIP)
 		read_mem(copy_data, obj_address + (u16) register_address,
 			 (u8) size_one, &val);
 		printk(KERN_ERR "[TSP]TA_probe MXT224 T%d Byte%d is %d\n", 9,
 		       register_address, val);
+#endif
 
 		value = (u8) movfilter;
 		register_address = 13;
@@ -744,7 +748,7 @@ void check_chip_calibration(unsigned char one_touch_input_flag)
 	    get_object_info(copy_data, DEBUG_DIAGNOSTIC_T37, &size,
 			    &object_address);
 
-	mdelay(10);
+	usleep_range(10000, 10000);
 
 	/* read touch flags from the diagnostic object
 	- clear buffer so the while loop can run first time */
@@ -762,7 +766,7 @@ void check_chip_calibration(unsigned char one_touch_input_flag)
 			break;
 		}
 
-		mdelay(2);	/* 0318 hugh  3-> 2 */
+		usleep_range(2000, 2000);	/* 0318 hugh  3-> 2 */
 		try_ctr++;	/* timeout counter */
 		/* read_mem(diag_address, 2,data_buffer); */
 
@@ -1330,6 +1334,7 @@ static void report_input_data(struct mxt224_data *data)
 #else
 			printk(KERN_ERR "[TSP] Up[%d]\n", i);
 #endif
+
 			continue;
 		}
 
@@ -1735,6 +1740,7 @@ static void median_err_setting(void)
 				write_mem(copy_data, obj_address+39, 1,
 				&value);
 #else
+#if 0
 				ret =
 				    get_object_info(copy_data,
 						    TOUCH_MULTITOUCHSCREEN_T9,
@@ -1748,18 +1754,19 @@ static void median_err_setting(void)
 				value = 80;
 				write_mem(copy_data, obj_address + 13, 1,
 					  &value);
+#endif
 				ret |=
 				    get_object_info(copy_data,
 						    SPT_CTECONFIG_T46,
 						    &size_one, &obj_address);
-				value = 32;
+				value = 48;  /* 32;*/
 				write_mem(copy_data, obj_address + 3, 1,
 					  &value);
 				ret |=
 				    get_object_info(copy_data,
 						    PROCG_NOISESUPPRESSION_T48,
 						    &size_one, &obj_address);
-				value = 29;
+				value = 20; /*29;*/
 				write_mem(copy_data, obj_address + 3, 1,
 					  &value);
 				value = 1;
@@ -1768,25 +1775,27 @@ static void median_err_setting(void)
 				value = 2;
 				write_mem(copy_data, obj_address + 9, 1,
 					  &value);
-				value = 100;
+				value = 64; /*100;*/
 				write_mem(copy_data, obj_address + 17, 1,
 					  &value);
 				value = 64;
 				write_mem(copy_data, obj_address + 19, 1,
 					  &value);
-				value = 20;
+				value = 100; /*20;*/
 				write_mem(copy_data, obj_address + 22, 1,
 					  &value);
-				value = 38;
+				value = 100; /*38;*/
 				write_mem(copy_data, obj_address + 25, 1,
 					  &value);
+#if 0
 				value = 16;
 				write_mem(copy_data, obj_address + 34, 1,
 					  &value);
+#endif
 				value = 40;
 				write_mem(copy_data, obj_address + 35, 1,
 					  &value);
-				value = 80;
+				value = 81; /*80;*/
 				write_mem(copy_data, obj_address + 39, 1,
 					  &value);
 #endif
@@ -1863,7 +1872,7 @@ static void median_err_setting(void)
 				    get_object_info(copy_data,
 						    SPT_CTECONFIG_T46,
 						    &size_one, &obj_address);
-				value = 63;	/* actvsyncsperx */
+				value = 53;	/* actvsyncsperx */
 				write_mem(copy_data, obj_address + 3, 1,
 					  &value);
 			}
@@ -3208,6 +3217,7 @@ static ssize_t set_mxt_update_show(struct device *dev,
 		copy_data->firm_status_data = 3;
 		printk(KERN_ERR
 			"[TSP The firmware update failed(%d)\n", error);
+		enable_irq(data->client->irq);
 		return error;
 	} else {
 		dev_dbg(dev, "The firmware update succeeded\n");
@@ -3215,7 +3225,7 @@ static ssize_t set_mxt_update_show(struct device *dev,
 		printk(KERN_ERR "[TSP] The firmware update succeeded\n");
 
 		/* Wait for reset */
-		mdelay(QT602240_FWRESET_TIME);
+		msleep(QT602240_FWRESET_TIME);
 		/* initialize the TSP */
 		mxt224_init_touch_driver(data);
 		/*jerry no need of it */
