@@ -26,6 +26,7 @@
 struct sii9234_platform_data {
 	u8 power_state;
 	u8	swing_level;
+	u8	factory_test;
 	int ddc_i2c_num;
 	void (*init)(void);
 	void (*mhl_sel)(bool enable);

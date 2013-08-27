@@ -12,7 +12,7 @@ DHDCFLAGS = -Wall -Wstrict-prototypes -Dlinux -DLINUX -DBCMDRIVER             \
         -DKEEP_ALIVE -DCSCAN -DPKT_FILTER_SUPPORT                             \
         -DEMBEDDED_PLATFORM
 #-DPNO_SUPPORT
-// MERGE        -DEMBEDDED_PLATFORM -DPNO_SUPPORT
+# MERGE        -DEMBEDDED_PLATFORM -DPNO_SUPPORT
 
 # distinguish between the 43xx chip
 ifeq ($(CONFIG_BCM4334),m)

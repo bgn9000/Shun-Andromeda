@@ -232,7 +232,9 @@ extern int mfc_late_init(void);
 #ifdef CONFIG_CPU_EXYNOS4210
 extern int u1_gps_ntt_init(void);
 #endif
+#ifdef CONFIG_MALI_R3P0_LSI
 extern int new_late_mali_driver_init(void);
+#endif
 extern int late_mali_driver_init(void);
 #ifdef CONFIG_MALI_CONTROL
 extern int register_mali_control(void);

@@ -16,6 +16,7 @@
 struct mmc_cid {
 	unsigned int		manfid;
 	char			prod_name[8];
+	unsigned short		prod_rev;
 	unsigned int		serial;
 	unsigned short		oemid;
 	unsigned short		year;
@@ -93,6 +94,7 @@ struct mmc_ext_csd {
 
 	unsigned int            feature_support;
 #define MMC_DISCARD_FEATURE	BIT(0)                  /* CMD38 feature */
+#define MMC_POWEROFF_NOTIFY_FEATURE	BIT(1)		/* PON feature */
 };
 
 struct sd_scr {
@@ -242,8 +244,13 @@ struct mmc_card {
 	unsigned int		sd_bus_speed;	/* Bus Speed Mode set for the card */
 
 	struct dentry		*debugfs_root;
+	unsigned int		movi_ops;
+	unsigned int		movi_fwver;
+	unsigned int		movi_fwdate;
 };
 
+#define MMC_MOVI_VER_VHX0	(1<<4)
+#define MMC_MOVI_VER_VMX0	(1<<5)
 /*
  *  The world is not perfect and supplies us with broken mmc/sdio devices.
  *  For at least some of these bugs we need a work-around.
@@ -434,6 +441,5 @@ extern void mmc_unregister_driver(struct mmc_driver *);
 
 extern void mmc_fixup_device(struct mmc_card *card,
 			     const struct mmc_fixup *table);
-extern void mmc_fixup_samsung_fw(struct mmc_card *card);
 
 #endif

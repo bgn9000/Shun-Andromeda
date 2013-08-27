@@ -30,6 +30,7 @@
 #include <linux/sensor/k3g.h>
 #include <linux/sensor/k3dh.h>
 #include <linux/sensor/ak8975.h>
+#include <linux/kallsyms.h>
 #ifdef CONFIG_MACH_U1_BD
 #include <linux/sensor/cm3663.h>
 #include <linux/sensor/pas2m110.h>
@@ -54,9 +55,6 @@
 #include <linux/power_supply.h>
 #if defined(CONFIG_S5P_MEM_CMA)
 #include <linux/cma.h>
-#endif
-#ifdef CONFIG_ANDROID_RAM_CONSOLE
-#include <linux/bootmem.h>
 #endif
 #ifdef CONFIG_ANDROID_PMEM
 #include <linux/android_pmem.h>
@@ -3538,7 +3536,6 @@ static int max8997_muic_charger_cb(int cable_type)
 		is_cable_attached = true;
 		break;
 	case CABLE_TYPE_MHL_VB:
-	case CABLE_TYPE_OTG_VB:
 		value.intval = POWER_SUPPLY_TYPE_MISC;
 		is_cable_attached = true;
 		break;
@@ -3606,7 +3603,7 @@ struct platform_device host_notifier_device = {
 };
 
 #include "u1-otg.c"
-static void max8997_muic_usb_cb(u8 usb_mode, bool bus_powered)
+static void max8997_muic_usb_cb(u8 usb_mode)
 {
 	struct s3c_udc *udc = platform_get_drvdata(&s3c_device_usbgadget);
 	int ret = 0;
@@ -3645,19 +3642,16 @@ static void max8997_muic_usb_cb(u8 usb_mode, bool bus_powered)
 #endif
 
 	if (udc) {
-		if (usb_mode == USB_OTGHOST_ATTACHED && !bus_powered) {
+		if (usb_mode == USB_OTGHOST_ATTACHED) {
 			usb_otg_accessory_power(1);
 			max8997_muic_charger_cb(CABLE_TYPE_OTG);
-		} else if (usb_mode == USB_OTGHOST_ATTACHED) {
-			pr_info("%s: usb vbus powered host\n", __func__);
-			usb_otg_accessory_power(0);
 		}
 
 		ret = c210_change_usb_mode(udc, usb_mode);
 		if (ret < 0)
 			pr_err("%s: fail to change mode!!!\n", __func__);
 
-		if (usb_mode == USB_OTGHOST_DETACHED && !bus_powered)
+		if (usb_mode == USB_OTGHOST_DETACHED)
 			usb_otg_accessory_power(0);
 	} else
 		pr_info("otg error s3c_udc is null.\n");
@@ -5638,20 +5632,6 @@ static u8 t9_config_e[] = { TOUCH_MULTITOUCHSCREEN_T9,
 	223, 1, 10, 10, 10, 10, 143, 40, 143, 80,
 	18, 15, 50, 50, 0
 };
-// MERGE <<<<<<< HEAD
-// 
-// #else
-// static u8 t9_config_e[] = { TOUCH_MULTITOUCHSCREEN_T9,
-// 	139, 0, 0, 19, 11, 0, MXT224E_BLEN_BATT, MXT224E_THRESHOLD_BATT, 2, 1,
-// 	10,
-// 	5,			/* MOVHYSTI */
-// 	1, MXT224E_MOVFILTER_BATT, MXT224_MAX_MT_FINGERS, 5, 40, 10, 31, 3,
-// 	223, 1, 10, 10, 10, 10, 143, 40, 143, 80,
-// 	18, 15, 50, 50, 2
-// };
-// #endif
-// =======
->>>>>>> 4e35ef2... GT-I9100_JB_Opensource.zip
 #else
 static u8 t9_config_e[] = { TOUCH_MULTITOUCHSCREEN_T9,
 	139, 0, 0, 19, 11, 0, MXT224E_BLEN_BATT, MXT224E_THRESHOLD_BATT, 2, 1,
@@ -7072,53 +7052,6 @@ static void __init mipi_fb_init(void)
 }
 #endif
 
-#ifdef CONFIG_ANDROID_RAM_CONSOLE
-static struct resource ram_console_resource[] = {
-	{
-		.flags = IORESOURCE_MEM,
-	}
-};
-
-static struct platform_device ram_console_device = {
-	.name = "ram_console",
-	.id = -1,
-	.num_resources = ARRAY_SIZE(ram_console_resource),
-	.resource = ram_console_resource,
-};
-
-#define RAM_CONSOLE_CMDLINE ("0x100000@0x5e900000")
-
-static int __init setup_ram_console_mem(char *str)
-{
-	unsigned size;
-	str = RAM_CONSOLE_CMDLINE;
-	size = memparse(str, &str);
-
-	if (size && (*str == '@')) {
-		unsigned long long base = 0;
-
-		base = simple_strtoul(++str, &str, 0);
-		if (reserve_bootmem(base, size, BOOTMEM_EXCLUSIVE)) {
-			pr_err("%s: failed reserving size %d "
-			       "at base 0x%llx\n", __func__, size, base);
-			return -1;
-		}
-
-		ram_console_resource[0].start = base;
-		ram_console_resource[0].end = base + size - 1;
-		pr_err("%s: %x at %llx\n", __func__, size, base);
-	}
-	return 0;
-}
-
-/* without modifying the bootloader or harcoding cmdlines (which can mess up reboots), no way to pass 
-   a ram_console command line.  Just work around that little issue by triggering on a different parameter
-   and hardcoding the parameters to ram_console in the function */
-__setup("loglevel=", setup_ram_console_mem);
-
-/* __setup("ram_console=", setup_ram_console_mem); */
-#endif
-
 #ifdef CONFIG_ANDROID_PMEM
 static struct android_pmem_platform_data pmem_pdata = {
 	.name = "pmem",
@@ -7468,9 +7401,6 @@ static struct platform_device *smdkc210_devices[] __initdata = {
 	&s5p_device_tvout,
 	&s5p_device_cec,
 	&s5p_device_hpd,
-#endif
-#ifdef CONFIG_ANDROID_RAM_CONSOLE
-	&ram_console_device,
 #endif
 #ifdef CONFIG_ANDROID_PMEM
 	&pmem_device,

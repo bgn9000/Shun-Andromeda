@@ -1799,12 +1799,9 @@ int late_init_android_gadget(int romtype)
 	if (!dev)
 		return -ENOMEM;
 
-// MERGE
+	dev->disable_depth = 1;
 	if(!romtype) dev->functions = supported3sung_functions;
 	else dev->functions = supported_functions;
-//=======
-	dev->disable_depth = 1;
-// MERGE	dev->functions = supported_functions;
 	INIT_LIST_HEAD(&dev->enabled_functions);
 	INIT_WORK(&dev->work, android_work);
 	mutex_init(&dev->mutex);
